@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.dist/
+build/
+*.log
+
+# Virtual envs
+.venv/
+venv/
+ENV/
+
+# OS junk
+.DS_Store
+
+# Tests
+.pytest_cache/
+
+# IDE
+.idea/
+
+# Local env (DO NOT COMMIT)
+.env
