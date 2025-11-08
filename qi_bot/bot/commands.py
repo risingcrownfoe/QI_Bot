@@ -1,3 +1,5 @@
+# qi_bot/bot/commands.py
+
 import logging
 from datetime import datetime, timedelta
 
@@ -21,6 +23,7 @@ except ImportError:
 
 log = logging.getLogger("qi-bot")
 TZ = ZoneInfo(settings.TIMEZONE)
+
 
 # -------- Helpers --------
 
@@ -46,7 +49,7 @@ def _all_days_iter(schedule_data):
 
 
 def _fmt_time_and_optional_title(ev, idx=None):
-    """Return 'N. HH:MM Uhr: <title>' or 'HH:MM Uhr: ' (no title) according to request."""
+    """Return 'N. HH:MM Uhr: <title>' or 'HH:MM Uhr:' (no title) according to request."""
     hhmm = ev.get("time", "??:??")
     title = ev.get("title")  # may be None
     prefix = f"{idx}. " if idx is not None else ""
@@ -57,11 +60,10 @@ def _fmt_time_and_optional_title(ev, idx=None):
 
 
 def _find_now_and_next_for_today(now_dt):
-    """Return (latest_ev_or_None, next_ev_or_None, today_daynum)."""
+    """Return (latest_ev_or_None, next_ev_or_None, today_daynum) limited to *today only*."""
     today = now_dt.date()
     daynum = cycle_day_for_public(today)
     events = get_events_for_day(daynum)
-    # events are sorted by time string already
     latest = None
     nxt = None
     for ev in events:
@@ -86,45 +88,89 @@ def _find_first_event_after_today(now_dt):
     return None, None
 
 
-# -------- Command registry --------
+def _find_most_recent_event_across_days(now_dt):
+    """
+    Find the most recent event at or before 'now', scanning backwards up to one full cycle.
+    Returns (event_or_None, daynum_or_None, event_datetime_or_None).
+    """
+    best_ev = None
+    best_dt = None
+    best_daynum = None
 
-# Visible command pairs (left = EN, right = DE)
-VISIBLE_ALIASES = [
-    ("%help", "%hilfe"),
-    ("%today", "%heute"),
-    ("%day", "%tag"),
-    ("%all", "%alle"),
-    ("%now", "%jetzt"),
-    ("%next", "%nächster"),
-    ("%step", "%schritt"),
-]
+    for days_back in range(0, settings.CYCLE_LENGTH):  # include today
+        dt_day = now_dt - timedelta(days=days_back)
+        dnum = cycle_day_for_public(dt_day.date())
+        evs = get_events_for_day(dnum)
+        if not evs:
+            continue
+        for ev in evs:
+            try:
+                hh, mm = map(int, ev["time"].split(":"))
+            except Exception:
+                continue
+            ev_dt = dt_day.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if ev_dt <= now_dt and (best_dt is None or ev_dt > best_dt):
+                best_ev = ev
+                best_dt = ev_dt
+                best_daynum = dnum
 
-# Hidden synonyms that are accepted but NOT shown in help
-HIDDEN_ALIASES = {
-    "%naechster": "%next",  # maps to %next
+    return best_ev, best_daynum, best_dt
+
+
+# -------- Alias registry (single source of truth) --------
+# Define visible aliases per language and hidden ones here; the router builds maps from this.
+
+COMMAND_ALIASES = {
+    "help": {
+        "en": ["%help"],
+        "de": ["%hilfe"],
+        "hidden": []
+    },
+    "today": {
+        "en": ["%today"],
+        "de": ["%heute"],
+        "hidden": []
+    },
+    "day": {
+        "en": ["%day"],
+        "de": ["%tag"],
+        "hidden": ["%d"]
+    },
+    "all": {
+        "en": ["%all"],
+        "de": ["%alle"],
+        "hidden": []
+    },
+    "now": {
+        "en": ["%now"],
+        "de": ["%jetzt"],
+        "hidden": []
+    },
+    "next": {
+        "en": ["%next"],
+        "de": ["%nächster"],
+        "hidden": ["%naechster"]  # accepted, not shown in help
+    },
+    "step": {
+        "en": ["%step"],
+        "de": ["%schritt"],
+        "hidden": ["%s"]
+    },
 }
 
-# Map of any trigger to the canonical command key
-CANONICAL = {
-    "%help": "help", "%hilfe": "help",
-    "%today": "today", "%heute": "today",
-    "%day": "day", "%tag": "day",
-    "%all": "all", "%alle": "all",
-    "%now": "now", "%jetzt": "now",
-    "%next": "next", "%nächster": "next", "%naechster": "next",
-    "%step": "step", "%schritt": "step",
-}
+# Build a fast lookup: alias -> (cmd_key, lang, is_hidden)
+ALIAS_LOOKUP = {}
+for key, spec in COMMAND_ALIASES.items():
+    for a in spec.get("en", []):
+        ALIAS_LOOKUP[a.lower()] = (key, "en", False)
+    for a in spec.get("de", []):
+        ALIAS_LOOKUP[a.lower()] = (key, "de", False)
+    for a in spec.get("hidden", []):
+        # hidden currently only used for DE; adjust if you add EN hidden aliases later
+        ALIAS_LOOKUP[a.lower()] = (key, "de", True)
 
-HELP_LINES = [
-    "%today / %heute — gibt alle für heute geplanten Schritte aus.",
-    "%day <d> / %tag <d> — zeigt alle Schritte für Tag d.",
-    "%all / %alle — zeigt alle geplanten Schritte (Zeit + Titel) für den gesamten Zyklus.",
-    "%now / %jetzt — zeigt den zuletzt fälligen Schritt von heute.",
-    "%next / %nächster — zeigt den nächsten Schritt.",
-    "%step <d> <n> / %schritt <d> <n> — zeigt den n-ten Schritt von Tag d (voller Text).",
-    "%help / %hilfe — zeigt diese Liste.",
-]
 
+# -------- Register handlers --------
 
 def register_handlers(client: discord.Client) -> None:
     @client.event
@@ -139,30 +185,35 @@ def register_handlers(client: discord.Client) -> None:
             return
 
         raw = message.content.strip()
+        if not raw:
+            return
         content = raw.lower()
 
-        # Rewrite hidden aliases to their canonical form (only for detection)
-        for hidden, maps_to in HIDDEN_ALIASES.items():
-            if content.startswith(hidden):
-                content = content.replace(hidden, maps_to, 1)
-                break
+        # Determine the trigger token (first word)
+        trigger = content.split()[0]
 
-        # Determine which command we’re handling
-        trigger = content.split()[0] if content else ""
-        cmd_key = CANONICAL.get(trigger)
-        if not cmd_key:
-            return  # ignore other messages
+        # If it looks like a command but not recognized, give a friendly hint
+        if trigger.startswith("%") and trigger not in ALIAS_LOOKUP:
+            await message.channel.send("Unbekannter Befehl. Probiere `%hilfe` (Deutsch) oder `%help` (English).")
+            return
+
+        # Map to canonical command and language
+        entry = ALIAS_LOOKUP.get(trigger)
+        if not entry:
+            return  # not a command for us
+
+        cmd_key, lang, _is_hidden = entry
 
         # Ensure we have the latest schedule
         load_schedule_if_changed()
 
-        # Route to handlers
+        # Route to handlers, passing lang + used alias where useful
         if cmd_key == "help":
-            await _handle_help(message)
+            await _handle_help(message, lang)
         elif cmd_key == "today":
             await _handle_today(message)
         elif cmd_key == "day":
-            await _handle_day(message, raw)
+            await _handle_day(message, raw, lang, trigger)
         elif cmd_key == "all":
             await _handle_all(message)
         elif cmd_key == "now":
@@ -170,23 +221,60 @@ def register_handlers(client: discord.Client) -> None:
         elif cmd_key == "next":
             await _handle_next(message)
         elif cmd_key == "step":
-            await _handle_step(message, raw)
+            await _handle_step(message, raw, lang, trigger)
+
+
+# -------- Help builders (English/German menus split) --------
+
+def _build_help_english() -> str:
+    """
+    English-only commands for easy copy in Discord (shown as inline code spans).
+    """
+    rows = [
+        ("%today",      "gives all steps scheduled for today."),
+        ("%day d",      "shows all steps for day d.\n    e.g. `%day 1` shows all steps for **Thursday**, the first day of QI."),
+        ("%step d n",   "shows the n-th step for day d.\n    e.g. `%step 1 2` shows the second message of day 1."),
+        ("%now",        "shows the most recent step (across days)."),
+        ("%next",       "shows the next step."),
+        ("%all",        "shows all scheduled steps for the entire QI."),
+        ("%help",       "shows this menu in English."),
+        ("%hilfe",      "zeigt das Hilfemenü auf Deutsch."),
+    ]
+    bullets = []
+    for left, right in rows:
+        bullets.append(f"`{left}` {right}")
+    return "\n\n".join(bullets)
+
+
+def _build_help_german() -> str:
+    """
+    German-only commands for easy copy in Discord (shown as inline code spans).
+    """
+    rows = [
+        ("%heute",                 "gibt alle für heute geplanten Schritte aus."),
+        ("%tag t",                 "zeigt alle Schritte für Tag t.\n    z. B. `%tag 1` zeigt alle Schritte für **Donnerstag**, den ersten Tag der QI."),
+        ("%schritt t n",           "zeigt den n-ten Schritt von Tag t.\n    z. B. `%schritt 1 2` zeigt die zweite Nachricht vom ersten Tag."),
+        ("%jetzt",                 "zeigt den zuletzt fälligen Schritt (über mehrere Tage hinweg)."),
+        ("%nächster",              "zeigt den nächsten Schritt."),  # (%naechster wird auch akzeptiert)
+        ("%alle",                  "zeigt alle geplanten Schritte für die gesamte QI."),
+        ("%hilfe",                 "zeigt dieses Menü auf Deutsch."),
+        ("%help",                  "shows the help menu in English."),
+    ]
+    bullets = []
+    for left, right in rows:
+        bullets.append(f"`{left}` {right}")
+    return "\n\n".join(bullets)
+
+
+def _build_aligned_help(lang: str) -> str:
+    """Decide which help to show based on the language inferred from the trigger."""
+    return _build_help_german() if lang == "de" else _build_help_english()
 
 
 # -------- Handlers --------
 
-async def _handle_help(message: discord.Message):
-    # Compose help with visible pairs; %naechster is intentionally not shown.
-    lines = [
-        "%today / %heute — gibt alle für heute geplanten Schritte aus.",
-        "%day <d> / %tag <d> — zeigt alle Schritte für Tag d.",
-        "%all / %alle — zeigt alle geplanten Schritte (Zeit + Titel) für den gesamten Zyklus.",
-        "%now / %jetzt — zeigt den zuletzt fälligen Schritt von heute.",
-        "%next / %nächster — zeigt den nächsten Schritt.",
-        "%step <d> <n> / %schritt <d> <n> — zeigt den n-ten Schritt von Tag d (voller Text).",
-        "%help / %hilfe — zeigt diese Liste.",
-    ]
-    await message.channel.send("\n".join(f"• {l}" for l in lines))
+async def _handle_help(message: discord.Message, lang: str):
+    await message.channel.send(_build_aligned_help(lang))
 
 
 async def _handle_today(message: discord.Message):
@@ -203,15 +291,15 @@ async def _handle_today(message: discord.Message):
     await message.channel.send(f"**Heute (Tag {daynum}):**\n" + "\n".join(lines))
 
 
-async def _handle_day(message: discord.Message, raw: str):
+async def _handle_day(message: discord.Message, raw: str, lang: str, used_alias: str):
     parts = raw.split()
     if len(parts) != 2:
-        await message.channel.send("Benutzung: `%day <d>` / `%tag <d>`")
+        await message.channel.send(_usage_day(lang))
         return
     try:
         d = int(parts[1])
     except ValueError:
-        await message.channel.send("Bitte eine Zahl für den Tag angeben, z. B. `%tag 3`.")
+        await message.channel.send(_usage_day(lang))
         return
 
     evs = get_events_for_day(d)
@@ -238,7 +326,7 @@ async def _handle_all(message: discord.Message):
         if not evs:
             continue
         header = f"**Tag {d}**" + (f" — {day_title}" if day_title else "")
-        lines = [ _fmt_time_and_optional_title(ev) for ev in evs ]
+        lines = [_fmt_time_and_optional_title(ev) for ev in evs]
         chunks.append(header + "\n" + "\n".join(lines))
 
     await message.channel.send("\n\n".join(chunks) if chunks else "Keine Daten verfügbar.")
@@ -246,22 +334,26 @@ async def _handle_all(message: discord.Message):
 
 async def _handle_now(message: discord.Message):
     now = datetime.now(TZ)
-    latest, nxt, daynum = _find_now_and_next_for_today(now)
 
-    if latest:
-        # Send FULL message for the latest (no title header)
-        await send_full_now(message.channel, latest)
+    # NEW: search backwards across days (up to CYCLE_LENGTH) for the most recent event
+    most_recent, mr_daynum, mr_dt = _find_most_recent_event_across_days(now)
+
+    if most_recent:
+        await send_full_now(message.channel, most_recent)
+        return
+
+    # Fallbacks if nothing found in the past window (unlikely if schedule is populated)
+    _, nxt, daynum = _find_now_and_next_for_today(now)
+    if nxt:
+        hhmm = nxt.get("time", "??:??")
+        await message.channel.send(f"Heute noch nichts fällig. Nächster Schritt (Tag {daynum}): **{hhmm} Uhr**.")
+        return
+
+    d2, first = _find_first_event_after_today(now)
+    if d2 and first:
+        await message.channel.send(f"Heute keine Schritte. Nächster Tag mit Inhalt: **Tag {d2}**, {first.get('time','??:??')} Uhr.")
     else:
-        if nxt:
-            hhmm = nxt.get("time", "??:??")
-            await message.channel.send(f"Heute noch nichts fällig. Nächster Schritt (Tag {daynum}): **{hhmm} Uhr**.")
-        else:
-            # No events today at all → find next day with content
-            d2, first = _find_first_event_after_today(now)
-            if d2 and first:
-                await message.channel.send(f"Heute keine Schritte. Nächster Tag mit Inhalt: **Tag {d2}**, {first.get('time','??:??')} Uhr.")
-            else:
-                await message.channel.send("Keine weiteren Schritte gefunden.")
+        await message.channel.send("Keine weiteren Schritte gefunden.")
 
 
 async def _handle_next(message: discord.Message):
@@ -279,15 +371,15 @@ async def _handle_next(message: discord.Message):
         await message.channel.send("Keine weiteren Schritte gefunden.")
 
 
-async def _handle_step(message: discord.Message, raw: str):
+async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias: str):
     parts = raw.split()
     if len(parts) != 3:
-        await message.channel.send("Benutzung: `%step <d> <n>` / `%schritt <d> <n>`")
+        await message.channel.send(_usage_step(lang))
         return
     try:
         d = int(parts[1]); n = int(parts[2])
     except ValueError:
-        await message.channel.send("Bitte Zahlen für Tag und Index angeben, z. B. `%schritt 2 1`.")
+        await message.channel.send(_usage_step(lang))
         return
     evs = get_events_for_day(d)
     if not evs:
@@ -297,3 +389,18 @@ async def _handle_step(message: discord.Message, raw: str):
         await message.channel.send(f"Tag {d} hat **{len(evs)}** Schritte. Index **{n}** ist ungültig.")
         return
     await send_full_now(message.channel, evs[n - 1])
+
+
+# -------- Usage messages (lang-specific, no angle brackets) --------
+
+def _usage_day(lang: str) -> str:
+    if lang == "de":
+        return "Benutzung: `%tag t`\n    z. B. `%tag 1` zeigt alle Schritte für **Donnerstag**, den ersten Tag der QI."
+    else:
+        return "Usage: `%day d`\n    e.g. `%day 1` shows all steps for **Thursday**, the first day of QI."
+
+def _usage_step(lang: str) -> str:
+    if lang == "de":
+        return "Benutzung: `%schritt t n`\n    z. B. `%schritt 1 2` zeigt die zweite Nachricht vom ersten Tag."
+    else:
+        return "Usage: `%step d n`\n    e.g. `%step 1 2` shows the second message of day 1."

@@ -16,7 +16,7 @@
       { /* Kirche wird abgerissen, daher alles vorher ernten */
         "time": "20:00",
         "title": "🏗 Gütergebäude platzieren",
-        "text": "**📬 Donnerstag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 1× Kirche\n• **BAU:** 1× Imkerei (*1 h warten* ⌛)",
+        "text": "**📬 Donnerstag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁) \n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 1× Kirche\n• **BAU:** 1× Imkerei (*1 h warten* ⌛)",
         "image": "images/d01_2.jpg"
       },
       {
@@ -36,13 +36,13 @@
       { /* Alchemistenlabor evtl. noch nicht fertig – nicht schlimm */
         "time": "08:00",
         "title": "🏗 Gütergebäude platzieren",
-        "text": "**📬 Freitag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Ernten was geht (Rest ernten wir 09:00)\n• **ABRISS:** 1× Gerberei\n• **BAU:** 1× Schießpulver-Manufaktur (*1 h warten* ⌛)",
+        "text": "**📬 Freitag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• Ernten was geht (Rest ernten wir 09:00)\n• **ABRISS:** 1× Gerberei\n• **BAU:** 1× Schießpulver-Manufaktur (*1 h warten* ⌛)",
         "image": "images/d02_1.jpg"
       },
       {
         "time": "09:00",
         "title": "🏗 Gebäude und 1 Erweiterung platzieren",
-        "text": "**📬 Freitag Morgen (09 Uhr)**\n\n🏗️ __Aktionen:__\n• 2× 20 Güter → 🧩 1 Erweiterung kaufen\n• **ABRISS:** 1× Schießpulver-Manufaktur\n• **BAU:** 2× Marktplatz\n• **BAU:** 1× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 1× Alchemistenlabor (*1 h warten* ⌛)",
+        "text": "**📬 Freitag Morgen (09 Uhr)**\n\n🏗️ __Aktionen:__\n• 2× 20 Güter → 🧩 1 Erweiterung kaufen (**Längs zur vorherigen. Siehe Bild**)\n• **ABRISS:** 1× Schießpulver-Manufaktur\n• **BAU:** 2× Marktplatz\n• **BAU:** 1× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 1× Alchemistenlabor (*1 h warten* ⌛)",
         "image": ["images/d02_2a.jpg","images/d02_2b.jpg"]
       },
       { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
@@ -53,7 +53,7 @@
       {
         "time": "20:00",
         "title": "🏗 Gütergebäude platzieren",
-        "text": "**📬 Freitag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• ⚠️ **ALLES ernten** (auch Fachwerkhaus/Alchemistenlabor)\n• **ABRISS:** 1× Marktplatz\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "text": "**📬 Freitag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠️ **ALLES ernten** (auch Fachwerkhaus/Alchemistenlabor)\n• **ABRISS:** 1× Marktplatz\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
         "image": "images/d02_3.jpg"
       },
       {
@@ -73,7 +73,7 @@
       {
         "time": "08:00",
         "title": "🏗 Gebäude platzieren",
-        "text": "**📬 Samstag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Ernten was geht (Rest ernten wir 09:00)\n• **ABRISS:** 3× Gerberei\n• **BAU:** 1× Katapult-Camp\n• 3× 10 Einheiten rekrutieren\n• **ABRISS:** 1× Katapult-Camp\n• **BAU:** 5× Alchemistenlabor (*1 h warten* ⌛)",
+        "text": "**📬 Samstag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• Ernten was geht (Rest ernten wir 09:00)\n• **ABRISS:** 3× Gerberei\n• **BAU:** 1× Katapult-Camp\n• 3× 10 Einheiten rekrutieren\n• **ABRISS:** 1× Katapult-Camp\n• **BAU:** 5× Alchemistenlabor (*1 h warten* ⌛)",
         "image": ["images/d03_1.jpg", "images/d03_2.jpg"]
       },
       { /* Alchemistenlabore erst 1h später fertig */
@@ -84,7 +84,7 @@
       {
         "time": "20:00",
         "title": "🏗 Gebäude platzieren",
-        "text": "**📬 Samstag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 1× Marktplatz\n• **ABRISS:** 1× Kirche\n• **ABRISS:** 1× Gerberei\n• **BAU:** 1× Pranger\n• **BAU:** 2× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 2× Alchemistenlabor (*1 h warten* ⌛)",
+        "text": "**📬 Samstag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 1× Marktplatz\n• **ABRISS:** 1× Kirche\n• **ABRISS:** 1× Gerberei\n• **BAU:** 1× Pranger\n• **BAU:** 2× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 2× Alchemistenlabor (*1 h warten* ⌛)",
         "image": "images/d03_3.jpg"
       },
       { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
@@ -98,7 +98,7 @@
       {
         "time": "08:00",
         "title": "🏗 Gütergebäude platzieren",
-        "text": "**📬 Sonntag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 2× Kirche\n• **ABRISS:** 1× Brauerei\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "text": "**📬 Sonntag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 2× Kirche\n• **ABRISS:** 1× Brauerei\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
         "image": "images/d04_1.jpg"
       },
       {
@@ -115,7 +115,7 @@
       {
         "time": "20:00",
         "title": "🏗 Gebäude platzieren",
-        "text": "**📬 Sonntag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• ⚠️ **ALLES ernten** (auch Fachwerkhaus/Alchemistenlabor)\n• **ABRISS:** 3× Kirche\n• **ABRISS:** 1× Mehrgeschossiges Haus\n• **BAU:** 1× Bliden-Camp (*1 h warten* ⌛)",
+        "text": "**📬 Sonntag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠️ **ALLES ernten** (auch Fachwerkhaus/Alchemistenlabor)\n• **ABRISS:** 3× Kirche\n• **ABRISS:** 1× Mehrgeschossiges Haus\n• **BAU:** 1× Bliden-Camp (*1 h warten* ⌛)",
         "image": "images/d04_3.jpg"
       },
       {
@@ -130,7 +130,7 @@
       {
         "time": "08:00",
         "title": "🏗 Gütergebäude platzieren",
-        "text": "**📬 Montag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• **ABRISS:** 1× Brauerei\n• **ABRISS:** 1× Kirche\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "text": "**📬 Montag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 1× Brauerei\n• **ABRISS:** 1× Kirche\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
         "image": "images/d05_1.jpg"
       },
       { /* Hinweis: wer keine % braucht, kann statt der 5 Dekos 2 zusätzliche Pranger bauen (noch testen) */
@@ -142,7 +142,7 @@
       {
         "time": "20:00",
         "title": "🏗 Gütergebäude platzieren",
-        "text": "**📬 Montag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• **ABRISS:** 2× Mehrgeschossiges Haus\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "text": "**📬 Montag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 2× Mehrgeschossiges Haus\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
         "image": "images/d05_3.jpg"
       },
       {
@@ -157,7 +157,7 @@
       {
         "time": "08:00",
         "title": "🏗 Gütergebäude platzieren",
-        "text": "**📬 Dienstag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• **ABRISS:** 1× Mehrgeschossiges Haus\n• **ABRISS:** 1× Gutshaus\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "text": "**📬 Dienstag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 1× Mehrgeschossiges Haus\n• **ABRISS:** 1× Gutshaus\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
         "image": "images/d06_1.jpg"
       },
       {
@@ -183,13 +183,13 @@
       {
         "time": "08:00",
         "title": "🏗 Gebäude platzieren",
-        "text": "**📬 Mittwoch Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• **ABRISS:** 3× Galgen\n• **BAU:** 3× Pranger\n• **BAU:** 9× Wegweiser 🔴 **oder** Wasserspeier 🔵",
+        "text": "**📬 Mittwoch Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 3× Galgen\n• **BAU:** 3× Pranger\n• **BAU:** 9× Wegweiser 🔴 **oder** Wasserspeier 🔵",
         "image": "images/d07_1.jpg"
       },
       {
         "time": "20:00",
         "title": "🏗 Gebäude platzieren",
-        "text": "**📬 Mittwoch Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• **ABRISS:** 4× Brauerei\n• **ABRISS:** 1× Fachwerkhaus\n• **ABRISS:** 1× Bliden-Camp\n• **BAU:** 1× Kanonen-Camp\n• **BAU:** 8× Pranger\n• **BAU:** 8× Wegweiser 🔴 **oder** Wasserspeier 🔵",
+        "text": "**📬 Mittwoch Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 4× Brauerei\n• **ABRISS:** 1× Fachwerkhaus\n• **ABRISS:** 1× Bliden-Camp\n• **BAU:** 1× Kanonen-Camp\n• **BAU:** 8× Pranger\n• **BAU:** 8× Wegweiser 🔴 **oder** Wasserspeier 🔵",
         "image": "images/d07_2.jpg"
       }
     ],
