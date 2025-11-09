@@ -156,6 +156,11 @@ COMMAND_ALIASES = {
         "de": ["%schritt"],
         "hidden": ["%s"]
     },
+    "csv": {
+        "en": ["%csv"],
+        "de": ["%csv"],
+        "hidden": []
+    },
 }
 
 # Build a fast lookup: alias -> (cmd_key, lang, is_hidden)
@@ -222,6 +227,9 @@ def register_handlers(client: discord.Client) -> None:
             await _handle_next(message)
         elif cmd_key == "step":
             await _handle_step(message, raw, lang, trigger)
+        elif cmd_key == "csv":
+            await _handle_csv(message)
+
 
 
 # -------- Help builders (English/German menus split) --------
@@ -389,6 +397,28 @@ async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias
         await message.channel.send(f"Tag {d} hat **{len(evs)}** Schritte. Index **{n}** ist ungültig.")
         return
     await send_full_now(message.channel, evs[n - 1])
+
+
+async def _handle_csv(message: discord.Message):
+    from qi_bot.utils.forge_scrape import fetch_players, build_daily_csv_text, make_daily_filename
+    from qi_bot.utils.github_upload import push_csv_under_data
+    import asyncio
+
+    try:
+        async with message.channel.typing():
+            rows = await asyncio.to_thread(fetch_players)
+            # NEW: apply thresholds: >= 10_000 battles AND >= 5_000_000 points
+            csv_text = await asyncio.to_thread(
+                build_daily_csv_text, rows, 10_000, 5_000_000
+            )
+            filename = make_daily_filename(prefix="daily_data")
+            res = await asyncio.to_thread(push_csv_under_data, filename, csv_text)
+
+        await message.channel.send(
+            f"Uploaded **{filename}** with filtered rows:\n{res['html_url']}"
+        )
+    except Exception as e:
+        await message.channel.send(f"Upload failed: {e!s}")
 
 
 # -------- Usage messages (lang-specific, no angle brackets) --------

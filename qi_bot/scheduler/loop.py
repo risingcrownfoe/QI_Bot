@@ -123,12 +123,54 @@ async def scheduler_loop(client: discord.Client):
                 if now >= scheduled and (now - scheduled) <= timedelta(minutes=settings.SEND_MISSED_WITHIN_MINUTES):
                     for ch in channels:
                         await _send_event(ch, scheduled, ev, idx)
+            await _run_daily_csv_if_due(channels, now)
 
             await asyncio.sleep(30)
         except Exception as e:
             log.exception("[loop] %s", e)
             await asyncio.sleep(5)
 
+
+
+async def _run_daily_csv_if_due(channels, now: datetime):
+    """Create and upload the daily CSV at 04:00 local time (Europe/Zurich).
+
+    Uses the same logic as the %csv command but runs automatically once per day.
+    Posts a short confirmation with the GitHub link to the first allowed channel.
+    """
+    # Compute today's 04:00 timestamp in TZ
+    scheduled = datetime(now.year, now.month, now.day, 4, 0, tzinfo=TZ)
+    key = f"csv|{scheduled.date()}|04:00"
+
+    # only run within the grace window and once per day
+    if now >= scheduled and (now - scheduled) <= timedelta(minutes=settings.SEND_MISSED_WITHIN_MINUTES):
+        async with _sent_cache_lock:
+            if key in _sent_cache:
+                return
+            _sent_cache.add(key)
+
+        # Import here to avoid overhead if not due
+        try:
+            import asyncio
+            from qi_bot.utils.forge_scrape import fetch_players, build_daily_csv_text, make_daily_filename
+            from qi_bot.utils.github_upload import push_csv_under_data
+
+            rows = await asyncio.to_thread(fetch_players)
+            csv_text = await asyncio.to_thread(build_daily_csv_text, rows, 10_000, 5_000_000)
+            filename = make_daily_filename(prefix="daily_data")
+            res = await asyncio.to_thread(push_csv_under_data, filename, csv_text)
+
+            # Send a brief message to the first configured channel (if any)
+            if channels:
+                ch = channels[0]
+                try:
+                    await ch.send(f"Daily CSV uploaded: **{filename}**\n{res.get('html_url', '(no link)')}")
+                except Exception as send_err:
+                    log.error("[csv] Could not send confirmation message: %s", send_err)
+
+            log.info("[csv] ✅ Uploaded %s", filename)
+        except Exception as e:
+            log.exception("[csv] ❌ %s", e)
 
 def start_scheduler(client: discord.Client):
     global _scheduler_started
