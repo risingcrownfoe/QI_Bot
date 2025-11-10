@@ -35,7 +35,7 @@ def build_daily_csv_text(rows, min_battles=10_000, min_points=5_000_000):
         guild_id   = p.get("guild_id", "")
         points_change   = p.get("points_change", "")
         battles_change  = p.get("battles_change", "")
-        era        = p.get("era", "")
+        era        = p.get("raw","").get("era","")
         points     = p.get("points", 0)
         battles    = p.get("battles", 0)
 
