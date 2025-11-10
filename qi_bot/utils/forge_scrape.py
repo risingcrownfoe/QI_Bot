@@ -24,7 +24,7 @@ def build_daily_csv_text(rows, min_battles=10_000, min_points=5_000_000):
     """
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["name", "player_id", "guild_name", "guild_id", "points_change", "battles_change", "points", "battles"])
+    w.writerow(["name", "player_id", "guild_name", "guild_id", "points_change", "battles_change", "era", "points", "battles"])
 
     kept = 0
     for p in rows:
@@ -35,6 +35,7 @@ def build_daily_csv_text(rows, min_battles=10_000, min_points=5_000_000):
         guild_id   = p.get("guild_id", "")
         points_change   = p.get("points_change", "")
         battles_change  = p.get("battles_change", "")
+        era        = p.get("era", "")
         points     = p.get("points", 0)
         battles    = p.get("battles", 0)
 
@@ -57,7 +58,7 @@ def build_daily_csv_text(rows, min_battles=10_000, min_points=5_000_000):
         if battles < min_battles or points < min_points:
             continue
 
-        w.writerow([name, player_id, guild_name, guild_id, points_change, battles_change, points, battles])
+        w.writerow([name, player_id, guild_name, guild_id, points_change, battles_change, era, points, battles])
         kept += 1
 
     return buf.getvalue()
