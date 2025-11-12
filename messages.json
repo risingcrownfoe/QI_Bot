@@ -207,6 +207,12 @@
     "11": [ /* ---------- Day 11 (Sonntag) ---------- */ ],
     "12": [ /* ---------- Day 12 (Montag) ---------- */ ],
     "13": [ /* ---------- Day 13 (Dienstag) ---------- */ ],
-    "14": [ /* ---------- Day 14 (Mittwoch) ---------- */ ]
+    "14": [
+      {
+        "time": "12:00",
+        "title": "⏰ Reminder erhabene QI Gebäude",
+        "text": "**⏰ Reminder erhabene QI Gebäude setzen**\n\n🏗️ __Aktionen:__\n• Nach Bedarf **Truppen**\n• **+50 Güter**: für fortgeschrittene Taktik\n• **QI-Münzen / QI-Vorräte**: besonders prozentualle Boosts von Vorteil"
+      }
+    ]
   }
 }
