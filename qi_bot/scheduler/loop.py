@@ -15,7 +15,6 @@ from qi_bot.schedule.resolver import resolve_event, collect_files
 
 log = logging.getLogger("qi-bot")
 
-# Sent cache and guard flags live here
 _sent_cache: Set[str] = set()
 _sent_cache_lock = asyncio.Lock()
 _current_date_str: str | None = None
@@ -50,7 +49,9 @@ async def _ensure_channels(client: discord.Client):
     return channels
 
 
-async def _send_event(channel: discord.abc.Messageable, when_dt: datetime, raw_event: dict, idx: int):
+async def _send_event(
+    channel: discord.abc.Messageable, when_dt: datetime, raw_event: dict, idx: int
+):
     event = resolve_event(raw_event, get_schedule_data())
     text = (event.get("text") or "").strip()
     files = [discord.File(fp) for fp in collect_files(event.get("image"))]
@@ -80,7 +81,6 @@ async def _send_preview(channel: discord.abc.Messageable, for_date: date):
         return
     header = f"**Tag {daynum} ({for_date.isoformat()}):** {len(events)} Schritte geplant.\n"
     await channel.send(header)
-    # Then send each full event one after another
     for idx, ev in enumerate(events):
         dt = datetime(for_date.year, for_date.month, for_date.day, tzinfo=TZ)
         await _send_event(channel, dt, ev, idx)
@@ -130,14 +130,16 @@ async def scheduler_loop(client: discord.Client):
                 except Exception:
                     log.error("[loop] Bad time format in event: %r", time_str)
                     continue
-                scheduled = datetime(today.year, today.month, today.day, hh, mm, tzinfo=TZ)
+                scheduled = datetime(
+                    today.year, today.month, today.day, hh, mm, tzinfo=TZ
+                )
                 if now >= scheduled and (now - scheduled) <= timedelta(
                     minutes=settings.SEND_MISSED_WITHIN_MINUTES
                 ):
                     for ch in channels:
                         await _send_event(ch, scheduled, ev, idx)
 
-            # New: run the daily D1 snapshot at ~04:00 local time
+            # Daily FoE → D1 snapshot at 04:00
             await _run_daily_snapshot_if_due(channels, now)
 
             await asyncio.sleep(30)
@@ -149,57 +151,84 @@ async def scheduler_loop(client: discord.Client):
 async def _run_daily_snapshot_if_due(channels, now: datetime):
     """Fetch FoE data and push a daily snapshot into Cloudflare D1 at 04:00 local time.
 
-    This replaces the former CSV/GitHub pipeline. We still respect the same
-    grace window (SEND_MISSED_WITHIN_MINUTES) and only run once per day.
+    Behaviour:
+      - runs once per day, within SEND_MISSED_WITHIN_MINUTES of 04:00
+      - on success: sends a ✅ confirmation message
+      - on error: sends a ❌ error message with a short description
+
+    The confirmation / error message is sent to the FIRST channel resolved
+    from settings.ALLOWED_CHANNEL_IDS (i.e. the first of DEFAULT_ALLOWED_CHANNEL_IDS).
     """
     # Compute today's 04:00 timestamp in TZ
     scheduled = datetime(now.year, now.month, now.day, 4, 0, tzinfo=TZ)
     key = f"d1-snapshot|{scheduled.date()}|04:00"
 
     # Only run within the grace window and once per day
-    if now >= scheduled and (now - scheduled) <= timedelta(
-        minutes=settings.SEND_MISSED_WITHIN_MINUTES
+    if not (
+        now >= scheduled
+        and (now - scheduled) <= timedelta(
+            minutes=settings.SEND_MISSED_WITHIN_MINUTES
+        )
     ):
-        async with _sent_cache_lock:
-            if key in _sent_cache:
-                return
-            _sent_cache.add(key)
+        return
 
-        # Import here so that normal bot usage does not pay the import cost
-        try:
-            import asyncio
-            from qi_bot.utils.forge_scrape import fetch_players, build_daily_rows
-            from qi_bot.utils.cloudflare_d1 import insert_daily_snapshot
+    async with _sent_cache_lock:
+        if key in _sent_cache:
+            return
+        _sent_cache.add(key)
 
-            # Fetch + filter in a worker thread (blocking I/O)
-            rows = await asyncio.to_thread(fetch_players)
-            filtered_rows = await asyncio.to_thread(
-                build_daily_rows, rows, 10_000, 5_000_000
+    # Use first allowed channel (if any) for status messages
+    target_channel = channels[0] if channels else None
+
+    try:
+        from qi_bot.utils.forge_scrape import fetch_players, build_daily_rows
+        from qi_bot.utils.cloudflare_d1 import insert_daily_snapshot
+
+        # Fetch + filter in a worker thread (blocking I/O)
+        rows = await asyncio.to_thread(fetch_players)
+        filtered_rows = await asyncio.to_thread(
+            build_daily_rows, rows, 10_000, 5_000_000
+        )
+
+        result = await asyncio.to_thread(insert_daily_snapshot, filtered_rows)
+
+        # ✅ SUCCESS MESSAGE
+        if target_channel:
+            label = result.get("label")
+            count = result.get("rows_inserted")
+            snapshot_id = result.get("snapshot_id")
+            await target_channel.send(
+                f"✅ Daily FoE snapshot stored in D1:\n"
+                f"- Label: **{label}**\n"
+                f"- Rows: **{count}**\n"
+                f"- Snapshot ID: `{snapshot_id}`"
             )
 
-            result = await asyncio.to_thread(insert_daily_snapshot, filtered_rows)
+        log.info(
+            "[d1] ✅ Snapshot %s stored with %s rows",
+            result.get("snapshot_id"),
+            result.get("rows_inserted"),
+        )
 
-            # Send a brief confirmation to the first configured channel (if any)
-            if channels:
-                ch = channels[0]
-                try:
-                    label = result.get("label")
-                    count = result.get("rows_inserted")
-                    snapshot_id = result.get("snapshot_id")
-                    await ch.send(
-                        f"Daily FoE snapshot stored in D1: **{label}** "
-                        f"(rows: {count}, snapshot_id: {snapshot_id})"
-                    )
-                except Exception as send_err:
-                    log.error("[d1] Could not send confirmation message: %s", send_err)
+    except Exception as e:  # ❌ ERROR PATH
+        log.exception("[d1] ❌ Daily snapshot failed: %s", e)
 
-            log.info(
-                "[d1] ✅ Snapshot %s stored with %s rows",
-                result.get("snapshot_id"),
-                result.get("rows_inserted"),
-            )
-        except Exception as e:  # pragma: no cover - defensive
-            log.exception("[d1] ❌ %s", e)
+        if target_channel:
+            # Build a short, safe error description
+            err_type = type(e).__name__
+            err_msg = str(e)
+            combined = f"{err_type}: {err_msg}"
+            # avoid accidentally spamming Discord with a huge message
+            combined = combined if len(combined) <= 1500 else combined[:1497] + "..."
+
+            try:
+                await target_channel.send(
+                    "❌ Daily FoE snapshot **FAILED**.\n"
+                    f"Error: `{combined}`\n"
+                    "Check Render logs for full stack trace."
+                )
+            except Exception as send_err:
+                log.error("[d1] Could not send error message to Discord: %s", send_err)
 
 
 def start_scheduler(client: discord.Client):
