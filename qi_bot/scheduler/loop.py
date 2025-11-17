@@ -61,41 +61,42 @@ async def _send_event(channel: discord.abc.Messageable, when_dt: datetime, raw_e
             return
         _sent_cache.add(key)
 
+    if not text and not files:
+        log.warning("[send_event] Empty text + no files for event %s", event)
+        return
+
     try:
-        if files:
-            await channel.send(content=text or None, files=files)
-        else:
-            await channel.send(content=text or "(no text)")
-        log.info("[send] ✅ %s", key)
+        await channel.send(text, files=files)
     except Exception as e:
-        log.error("[send] ❌ %s", e)
+        log.error("[send_event] Failed to send message: %s", e)
 
 
-async def _send_preview(channel: discord.abc.Messageable, raw_event: dict):
-    """Legacy preview (kept for backward-compat). Adds a '(Preview send)' header."""
-    event = resolve_event(raw_event, get_schedule_data())
-    text = (event.get("text") or "").strip()
-    files = [discord.File(fp) for fp in collect_files(event.get("image"))]
-    try:
-        await channel.send(content=f"*(Preview send)*\n{text}" if text else "*(Preview send — no text)*", files=files or None)
-        log.info("[preview] ✅")
-    except Exception as e:
-        log.error("[preview] ❌ %s", e)
+async def _send_preview(channel: discord.abc.Messageable, for_date: date):
+    """Used by %today and %day to preview what will be sent on a given date."""
+    daynum = cycle_day_for(for_date)
+    events = get_events_for_day(daynum)
+    if not events:
+        await channel.send(f"**Tag {daynum}**: keine Schritte geplant.")
+        return
+    header = f"**Tag {daynum} ({for_date.isoformat()}):** {len(events)} Schritte geplant.\n"
+    await channel.send(header)
+    # Then send each full event one after another
+    for idx, ev in enumerate(events):
+        dt = datetime(for_date.year, for_date.month, for_date.day, tzinfo=TZ)
+        await _send_event(channel, dt, ev, idx)
 
 
 async def _send_full_now(channel: discord.abc.Messageable, raw_event: dict):
-    """Send the full resolved message/content immediately, with NO extra header and NO sent-cache."""
-    event = resolve_event(raw_event, get_schedule_data())
-    text = (event.get("text") or "").strip()
-    files = [discord.File(fp) for fp in collect_files(event.get("image"))]
-    try:
-        if files:
-            await channel.send(content=text or None, files=files)
-        else:
-            await channel.send(content=text or "(kein Text)")
-        log.info("[send-now] ✅")
-    except Exception as e:
-        log.error("[send-now] ❌ %s", e)
+    """Send a full event immediately (used by %now, %next, %step)."""
+    ev = resolve_event(raw_event, get_schedule_data())
+    text = (ev.get("text") or "").strip()
+    files = [discord.File(fp) for fp in collect_files(ev.get("image"))]
+
+    if not text and not files:
+        await channel.send("(Leere Nachricht – bitte Kursleitung informieren.)")
+        return
+
+    await channel.send(text, files=files)
 
 
 async def scheduler_loop(client: discord.Client):
@@ -103,7 +104,10 @@ async def scheduler_loop(client: discord.Client):
     await client.wait_until_ready()
     channels = await _ensure_channels(client)
     load_schedule_if_changed(force=True)
-    log.info("[init] Ready. Posting to %s", ", ".join(f"#{getattr(c, 'name', c.id)}" for c in channels))
+    log.info(
+        "[init] Ready. Posting to %s",
+        ", ".join(f"#{getattr(c, 'name', c.id)}" for c in channels),
+    )
 
     while not client.is_closed():
         try:
@@ -118,12 +122,23 @@ async def scheduler_loop(client: discord.Client):
 
             events = get_events_for_day(cycle_day_for(today))
             for idx, ev in enumerate(events):
-                hh, mm = map(int, ev["time"].split(":"))
+                time_str = ev.get("time")
+                if not time_str:
+                    continue
+                try:
+                    hh, mm = map(int, time_str.split(":"))
+                except Exception:
+                    log.error("[loop] Bad time format in event: %r", time_str)
+                    continue
                 scheduled = datetime(today.year, today.month, today.day, hh, mm, tzinfo=TZ)
-                if now >= scheduled and (now - scheduled) <= timedelta(minutes=settings.SEND_MISSED_WITHIN_MINUTES):
+                if now >= scheduled and (now - scheduled) <= timedelta(
+                    minutes=settings.SEND_MISSED_WITHIN_MINUTES
+                ):
                     for ch in channels:
                         await _send_event(ch, scheduled, ev, idx)
-            await _run_daily_csv_if_due(channels, now)
+
+            # New: run the daily D1 snapshot at ~04:00 local time
+            await _run_daily_snapshot_if_due(channels, now)
 
             await asyncio.sleep(30)
         except Exception as e:
@@ -131,46 +146,61 @@ async def scheduler_loop(client: discord.Client):
             await asyncio.sleep(5)
 
 
+async def _run_daily_snapshot_if_due(channels, now: datetime):
+    """Fetch FoE data and push a daily snapshot into Cloudflare D1 at 04:00 local time.
 
-async def _run_daily_csv_if_due(channels, now: datetime):
-    """Create and upload the daily CSV at 04:00 local time (Europe/Zurich).
-
-    Uses the same logic as the %csv command but runs automatically once per day.
-    Posts a short confirmation with the GitHub link to the first allowed channel.
+    This replaces the former CSV/GitHub pipeline. We still respect the same
+    grace window (SEND_MISSED_WITHIN_MINUTES) and only run once per day.
     """
     # Compute today's 04:00 timestamp in TZ
     scheduled = datetime(now.year, now.month, now.day, 4, 0, tzinfo=TZ)
-    key = f"csv|{scheduled.date()}|04:00"
+    key = f"d1-snapshot|{scheduled.date()}|04:00"
 
-    # only run within the grace window and once per day
-    if now >= scheduled and (now - scheduled) <= timedelta(minutes=settings.SEND_MISSED_WITHIN_MINUTES):
+    # Only run within the grace window and once per day
+    if now >= scheduled and (now - scheduled) <= timedelta(
+        minutes=settings.SEND_MISSED_WITHIN_MINUTES
+    ):
         async with _sent_cache_lock:
             if key in _sent_cache:
                 return
             _sent_cache.add(key)
 
-        # Import here to avoid overhead if not due
+        # Import here so that normal bot usage does not pay the import cost
         try:
             import asyncio
-            from qi_bot.utils.forge_scrape import fetch_players, build_daily_csv_text, make_daily_filename
-            from qi_bot.utils.github_upload import push_csv_under_data
+            from qi_bot.utils.forge_scrape import fetch_players, build_daily_rows
+            from qi_bot.utils.cloudflare_d1 import insert_daily_snapshot
 
+            # Fetch + filter in a worker thread (blocking I/O)
             rows = await asyncio.to_thread(fetch_players)
-            csv_text = await asyncio.to_thread(build_daily_csv_text, rows, 10_000, 5_000_000)
-            filename = make_daily_filename(prefix="daily_data")
-            res = await asyncio.to_thread(push_csv_under_data, filename, csv_text)
+            filtered_rows = await asyncio.to_thread(
+                build_daily_rows, rows, 10_000, 5_000_000
+            )
 
-            # Send a brief message to the first configured channel (if any)
+            result = await asyncio.to_thread(insert_daily_snapshot, filtered_rows)
+
+            # Send a brief confirmation to the first configured channel (if any)
             if channels:
                 ch = channels[0]
                 try:
-                    await ch.send(f"Daily CSV uploaded: **{filename}**\n{res.get('html_url', '(no link)')}")
+                    label = result.get("label")
+                    count = result.get("rows_inserted")
+                    snapshot_id = result.get("snapshot_id")
+                    await ch.send(
+                        f"Daily FoE snapshot stored in D1: **{label}** "
+                        f"(rows: {count}, snapshot_id: {snapshot_id})"
+                    )
                 except Exception as send_err:
-                    log.error("[csv] Could not send confirmation message: %s", send_err)
+                    log.error("[d1] Could not send confirmation message: %s", send_err)
 
-            log.info("[csv] ✅ Uploaded %s", filename)
-        except Exception as e:
-            log.exception("[csv] ❌ %s", e)
+            log.info(
+                "[d1] ✅ Snapshot %s stored with %s rows",
+                result.get("snapshot_id"),
+                result.get("rows_inserted"),
+            )
+        except Exception as e:  # pragma: no cover - defensive
+            log.exception("[d1] ❌ %s", e)
+
 
 def start_scheduler(client: discord.Client):
     global _scheduler_started

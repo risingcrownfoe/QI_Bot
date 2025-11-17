@@ -1,67 +1,47 @@
 # qi_bot/utils/github_upload.py
-import os, base64, json, requests, datetime
+# NOTE: repurposed to push CSV data into Cloudflare D1 via a Worker,
+#       instead of uploading to GitHub.
 
-OWNER    = os.environ.get("GITHUB_OWNER", "risingcrownfoe")
-REPO     = os.environ.get("GITHUB_REPO", "QI_Bot")
-BRANCH   = os.environ.get("GITHUB_BRANCH", "main")
-DATA_DIR = os.environ.get("GITHUB_DATA_DIR", "data")
-TOKEN    = os.environ["GITHUB_TOKEN"]  # must be set in Render
+import os
+import json
+import requests
 
-def push_time_csv():
-    """
-    Builds a CSV (hour,minute,second) with current UTC time and uploads it
-    to GitHub as data/YYYYMMDD_HHMMSS.csv. Returns dict with html_url, etc.
-    """
-    now = datetime.datetime.now(datetime.timezone.utc)
-    ts = now.strftime("%Y%m%d_%H%M%S")
-    hour, minute, second = now.strftime("%H"), now.strftime("%M"), now.strftime("%S")
+# URL of the Cloudflare Worker endpoint, e.g.:
+#   https://foe-data-import.<your-account>.workers.dev/import-daily
+CF_IMPORT_URL = os.environ["CF_IMPORT_URL"]
 
-    csv_text = f"hour,minute,second\n{hour},{minute},{second}\n"
-    path = f"{DATA_DIR}/{ts}.csv"
-    url  = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{path}"
-    payload = {
-        "message": f"Add {path}",
-        "content": base64.b64encode(csv_text.encode("utf-8")).decode("ascii"),
-        "branch": BRANCH,
-    }
+# Shared secret that must match the IMPORT_SECRET in wrangler.toml
+CF_IMPORT_SECRET = os.environ["CF_IMPORT_SECRET"]
 
-    r = requests.put(
-        url,
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        data=json.dumps(payload),
-        timeout=30,
-    )
-    r.raise_for_status()
-    j = r.json()
-    return {
-        "path": j["content"]["path"],
-        "html_url": j["content"]["html_url"],
-        "commit_url": j["commit"]["html_url"],
-    }
 
 def push_csv_under_data(filename: str, csv_text: str):
     """
-    Uploads given CSV text to GitHub at data/<filename> on BRANCH.
-    Returns dict with html_url and commit_url.
-    """
-    path = f"{DATA_DIR}/{filename}"
-    url  = f"https://api.github.com/repos/{OWNER}/{REPO}/contents/{path}"
-    payload = {
-        "message": f"Add {path}",
-        "content": base64.b64encode(csv_text.encode("utf-8")).decode("ascii"),
-        "branch": BRANCH,
-    }
+    Send the daily CSV to the Cloudflare Worker that writes into D1.
 
-    r = requests.put(
-        url,
+    Arguments:
+        filename: e.g. "daily_data_20251117_040031.csv"
+        csv_text: CSV string starting with header:
+                  name,player_id,guild_name,guild_id,points_change,battles_change,era,points,battles
+
+    Returns:
+        Parsed JSON response from the Worker, e.g.:
+        {
+          "ok": true,
+          "filename": "...",
+          "label": "...",
+          "captured_at": "...",
+          "snapshot_id": 3,
+          "inserted": 1234,
+          "html_url": "Imported into D1 snapshot 3 (1234 rows)"
+        }
+    """
+    payload = {"filename": filename, "csv_text": csv_text}
+
+    r = requests.post(
+        CF_IMPORT_URL,
         headers={
-            "Authorization": f"Bearer {TOKEN}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
+            "Content-Type": "application/json",
+            "X-Import-Secret": CF_IMPORT_SECRET,
         },
         data=json.dumps(payload),
         timeout=60,
@@ -69,11 +49,8 @@ def push_csv_under_data(filename: str, csv_text: str):
     try:
         r.raise_for_status()
     except requests.HTTPError as err:
-        raise RuntimeError(f"GitHub API error {r.status_code}: {r.text}") from err
+        raise RuntimeError(
+            f"Cloudflare import error {r.status_code}: {r.text}"
+        ) from err
 
-    j = r.json()
-    return {
-        "path": j["content"]["path"],
-        "html_url": j["content"]["html_url"],
-        "commit_url": j["commit"]["html_url"],
-    }
+    return r.json()
