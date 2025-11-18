@@ -66,33 +66,53 @@ def _d1_base_url(cfg: D1Config) -> str:
 
 
 def d1_query(sql: str, params: Sequence[Any] | None = None) -> Mapping[str, Any]:
-    """Execute a SQL statement (or batch) via the D1 `/query` REST endpoint.
+    """Execute a SQL statement via the D1 `/query` REST endpoint.
 
-    The REST API formally documents params as a sequence of strings, so we
-    stringify everything here. SQLite will coerce types as needed.
+    If D1 returns an error, we raise RuntimeError with the detailed message
+    from the API response so it is visible in Discord + Render logs.
     """
     cfg = D1Config.from_env()
     url = _d1_base_url(cfg) + "/query"
 
     body: dict[str, Any] = {"sql": sql}
     if params:
+        # D1 REST API uses params as strings; SQLite will coerce types.
         body["params"] = ["" if p is None else str(p) for p in params]
 
     log.debug("[d1] POST %s payload=%s", url, json.dumps(body)[:500])
 
-    r = requests.post(
-        url,
-        headers={
-            "Authorization": f"Bearer {cfg.api_token}",
-            "Content-Type": "application/json",
-        },
-        json=body,
-        timeout=60,
-    )
-    r.raise_for_status()
-    data = r.json()
-    if not data.get("success", False):
-        raise RuntimeError(f"D1 query failed: {data}")
+    try:
+        r = requests.post(
+            url,
+            headers={
+                "Authorization": f"Bearer {cfg.api_token}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=60,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Failed to reach D1 API: {e}") from e
+
+    text = r.text
+    try:
+        data = r.json()
+    except Exception:
+        # Non-JSON response; fall back to HTTP status and raw text
+        if not r.ok:
+            raise RuntimeError(
+                f"D1 HTTP {r.status_code} error (non-JSON body): {text[:1000]}"
+            )
+        raise RuntimeError("D1 returned non-JSON response unexpectedly.")
+
+    # If HTTP status not OK or D1 indicates failure, surface error details
+    if not r.ok or not data.get("success", False):
+        errors = data.get("errors") or data.get("messages") or []
+        raise RuntimeError(
+            f"D1 HTTP {r.status_code} error: {json.dumps(errors)[:1000]}"
+        )
+
+    # D1 wraps results in result[0]
     return data
 
 
@@ -120,11 +140,12 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
     log.info("[d1] Creating snapshot '%s' with %d rows", label, len(rows))
 
     # 1) Upsert snapshot row
+    # Use INSERT OR REPLACE instead of ON CONFLICT(...) DO UPDATE
+    # to avoid any SQLite compile/version quirks.
     d1_query(
         """
-        INSERT INTO snapshots (label, captured_at)
-        VALUES (?, ?)
-        ON CONFLICT(label) DO UPDATE SET captured_at = excluded.captured_at;
+        INSERT OR REPLACE INTO snapshots (label, captured_at)
+        VALUES (?, ?);
         """,
         [label, captured_at],
     )
