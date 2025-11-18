@@ -115,6 +115,8 @@ def d1_query(sql: str, params: Sequence[Any] | None = None) -> Mapping[str, Any]
     return data
 
 
+from typing import Any, List, Mapping
+
 def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
     """Insert one daily snapshot plus all corresponding player_stats rows.
 
@@ -131,6 +133,7 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         log.warning("[d1] No rows to insert; skipping snapshot.")
         return {"label": None, "snapshot_id": None, "rows_inserted": 0}
 
+    # --- 1) Create / upsert snapshot row (unchanged, still uses parameters) ---
     now = datetime.now(TZ)
     ts = now.strftime("%Y%m%d_%H%M%S")
     label = f"daily_data_{ts}"
@@ -138,7 +141,6 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
 
     log.info("[d1] Creating snapshot '%s' with %d rows", label, len(rows))
 
-    # 1) Upsert snapshot row
     d1_query(
         """
         INSERT OR REPLACE INTO snapshots (label, captured_at)
@@ -147,25 +149,41 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         [label, captured_at],
     )
 
-    # 2) Fetch its id
+    # --- 2) Fetch snapshot id (unchanged) ---
     res = d1_query("SELECT id FROM snapshots WHERE label = ?;", [label])
     try:
         snapshot_id = res["result"][0]["results"][0]["id"]
     except Exception as e:  # pragma: no cover - defensive
-        raise RuntimeError(f"Could not read snapshot id from D1 response: {res}") from e
+        raise RuntimeError(
+            f"Could not read snapshot id from D1 response: {res}"
+        ) from e
 
-    # 3) Batch-insert all player_stats rows
-    # Cloudflare D1 clearly enforces a stricter "max SQL variables" limit.
-    # We insert 6 columns per row -> 6 params per row.
-    # Use a *very* conservative batch size to stay well below any limit.
+    # --- 3) Batch-insert all player_stats rows using inline SQL literals ---
+
+    # 6 numeric columns:
+    #   snapshot_id, player_id, guild_id, era_nr, points, battles
     COLS_PER_ROW = 6
-    BATCH_SIZE = 10  # 10 * 6 = 60 SQL params per statement
+    # Large but safe now that we don't use bound params; 8,7k rows -> ~9 statements
+    BATCH_SIZE = 1000
 
     log.info(
-        "[d1] Using batch size %d rows (max %d SQL params per statement)",
+        "[d1] Using batch size %d rows with inline literals (max ~%d values per statement)",
         BATCH_SIZE,
         BATCH_SIZE * COLS_PER_ROW,
     )
+
+    def sql_int(v: Any) -> str:
+        """Convert a value to a safe integer literal for SQL.
+
+        All these columns are numeric in the schema and come from the FoE API.
+        We coerce to int; on weird values we fall back to 0 or NULL.
+        """
+        if v is None:
+            return "NULL"
+        try:
+            return str(int(v))
+        except Exception:
+            return "0"
 
     total = 0
 
@@ -174,27 +192,31 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         if not chunk:
             continue
 
-        placeholders = ", ".join(["(?, ?, ?, ?, ?, ?)"] * len(chunk))
-        sql = (
-            "INSERT INTO player_stats "
-            "(snapshot_id, player_id, guild_id, era_nr, points, battles) "
-            f"VALUES {placeholders};"
-        )
-
-        params: list[Any] = []
+        # Build VALUES (...), (...), (...) with inline literals
+        values_parts: list[str] = []
         for row in chunk:
-            params.extend(
-                [
-                    snapshot_id,
-                    row.get("player_id", 0),
-                    row.get("guild_id", 0),
-                    row.get("era_nr", 0),
-                    row.get("points", 0),
-                    row.get("battles", 0),
-                ]
+            values_parts.append(
+                "("
+                f"{sql_int(snapshot_id)}, "
+                f"{sql_int(row.get('player_id'))}, "
+                f"{sql_int(row.get('guild_id'))}, "
+                f"{sql_int(row.get('era_nr'))}, "
+                f"{sql_int(row.get('points'))}, "
+                f"{sql_int(row.get('battles'))}"
+                ")"
             )
 
-        d1_query(sql, params)
+        sql = (
+            "INSERT INTO player_stats "
+            "(snapshot_id, player_id, guild_id, era_nr, points, battles) VALUES\n"
+            + ",\n".join(values_parts)
+            + ";"
+        )
+
+        # Inline literals -> no bound params -> no 100-variable limit.
+        # Also far fewer statements -> much less chance of 429 throttling.
+        d1_query(sql)
+
         total += len(chunk)
         log.info("[d1] Inserted %d/%d player rows so far", total, len(rows))
 
