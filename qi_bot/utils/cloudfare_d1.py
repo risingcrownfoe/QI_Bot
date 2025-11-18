@@ -1,4 +1,4 @@
-# qi_bot/utils/cloudflare_d1.py
+# qi_bot/utils/cloudfare_d1.py
 """Small helper to push a daily FoE snapshot into Cloudflare D1.
 
 We talk directly to the D1 REST API (`/query` endpoint), so this works
@@ -112,7 +112,6 @@ def d1_query(sql: str, params: Sequence[Any] | None = None) -> Mapping[str, Any]
             f"D1 HTTP {r.status_code} error: {json.dumps(errors)[:1000]}"
         )
 
-    # D1 wraps results in result[0]
     return data
 
 
@@ -140,8 +139,6 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
     log.info("[d1] Creating snapshot '%s' with %d rows", label, len(rows))
 
     # 1) Upsert snapshot row
-    # Use INSERT OR REPLACE instead of ON CONFLICT(...) DO UPDATE
-    # to avoid any SQLite compile/version quirks.
     d1_query(
         """
         INSERT OR REPLACE INTO snapshots (label, captured_at)
@@ -158,18 +155,11 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         raise RuntimeError(f"Could not read snapshot id from D1 response: {res}") from e
 
     # 3) Batch-insert all player_stats rows
-    # SQLite (and thus D1) have a default max of 999 variables per statement.
+    # Cloudflare D1 clearly enforces a stricter "max SQL variables" limit.
     # We insert 6 columns per row -> 6 params per row.
-    # So we must ensure: BATCH_SIZE * 6 <= 999.
-    MAX_SQL_VARS = 999
+    # Use a *very* conservative batch size to stay well below any limit.
     COLS_PER_ROW = 6
-    BATCH_SIZE = MAX_SQL_VARS // COLS_PER_ROW  # => 166 (safe upper bound)
-    if BATCH_SIZE <= 0:
-        BATCH_SIZE = 1
-
-    # Use a slightly smaller, round number as an extra safety margin.
-    if BATCH_SIZE > 150:
-        BATCH_SIZE = 150
+    BATCH_SIZE = 40  # 40 * 6 = 240 SQL params per statement
 
     log.info(
         "[d1] Using batch size %d rows (max %d SQL params per statement)",
