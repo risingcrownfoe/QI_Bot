@@ -158,7 +158,25 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         raise RuntimeError(f"Could not read snapshot id from D1 response: {res}") from e
 
     # 3) Batch-insert all player_stats rows
-    BATCH_SIZE = 500
+    # SQLite (and thus D1) have a default max of 999 variables per statement.
+    # We insert 6 columns per row -> 6 params per row.
+    # So we must ensure: BATCH_SIZE * 6 <= 999.
+    MAX_SQL_VARS = 999
+    COLS_PER_ROW = 6
+    BATCH_SIZE = MAX_SQL_VARS // COLS_PER_ROW  # => 166 (safe upper bound)
+    if BATCH_SIZE <= 0:
+        BATCH_SIZE = 1
+
+    # Use a slightly smaller, round number as an extra safety margin.
+    if BATCH_SIZE > 150:
+        BATCH_SIZE = 150
+
+    log.info(
+        "[d1] Using batch size %d rows (max %d SQL params per statement)",
+        BATCH_SIZE,
+        BATCH_SIZE * COLS_PER_ROW,
+    )
+
     total = 0
 
     for start in range(0, len(rows), BATCH_SIZE):
