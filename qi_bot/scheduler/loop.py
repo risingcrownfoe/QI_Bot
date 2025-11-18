@@ -160,7 +160,7 @@ async def _run_daily_snapshot_if_due(channels, now: datetime):
     from settings.ALLOWED_CHANNEL_IDS (i.e. the first of DEFAULT_ALLOWED_CHANNEL_IDS).
     """
     # Compute today's 04:00 timestamp in TZ
-    scheduled = datetime(now.year, now.month, now.day, 9, 40, tzinfo=TZ)
+    scheduled = datetime(now.year, now.month, now.day, 9, 59, tzinfo=TZ)
     key = f"d1-snapshot|{scheduled.date()}|04:00"
 
     # Only run within the grace window and once per day
