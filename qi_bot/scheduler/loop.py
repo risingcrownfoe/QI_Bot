@@ -160,7 +160,7 @@ async def _run_daily_snapshot_if_due(channels, now: datetime):
     from settings.ALLOWED_CHANNEL_IDS (i.e. the first of DEFAULT_ALLOWED_CHANNEL_IDS).
     """
     # Compute today's 04:00 timestamp in TZ
-    scheduled = datetime(now.year, now.month, now.day, 4, 0, tzinfo=TZ)
+    scheduled = datetime(now.year, now.month, now.day, 7, 19, tzinfo=TZ)
     key = f"d1-snapshot|{scheduled.date()}|04:00"
 
     # Only run within the grace window and once per day
@@ -182,7 +182,7 @@ async def _run_daily_snapshot_if_due(channels, now: datetime):
 
     try:
         from qi_bot.utils.forge_scrape import fetch_players, build_daily_rows
-        from qi_bot.utils.cloudflare_d1 import insert_daily_snapshot
+        from qi_bot.utils.cloudfare_d1 import insert_daily_snapshot
 
         # Fetch + filter in a worker thread (blocking I/O)
         rows = await asyncio.to_thread(fetch_players)
