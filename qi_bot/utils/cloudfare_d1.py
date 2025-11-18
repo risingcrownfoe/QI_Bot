@@ -159,7 +159,7 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
     # We insert 6 columns per row -> 6 params per row.
     # Use a *very* conservative batch size to stay well below any limit.
     COLS_PER_ROW = 6
-    BATCH_SIZE = 40  # 40 * 6 = 240 SQL params per statement
+    BATCH_SIZE = 10  # 10 * 6 = 60 SQL params per statement
 
     log.info(
         "[d1] Using batch size %d rows (max %d SQL params per statement)",
