@@ -114,6 +114,7 @@ def d1_query(sql: str, params: Sequence[Any] | None = None) -> Mapping[str, Any]
 
     return data
 
+
 def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
     """Insert one daily snapshot plus all corresponding player_stats rows.
 
@@ -123,8 +124,14 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         - era_nr
         - points
         - battles
+        - (optionally) player_name
+        - (optionally) guild_name
 
-    Returns a small dict with snapshot label, id and inserted row count.
+    Behaviour:
+        - Always upserts player_names / guild_names (INSERT OR IGNORE).
+        - Inserts at most one snapshot per local day into `snapshots`.
+        - If a snapshot for today already exists, no new snapshot or
+          player_stats rows are inserted; only name mappings are updated.
     """
 
     def sql_int(v: Any) -> str:
@@ -153,32 +160,11 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         log.warning("[d1] No rows to insert; skipping snapshot.")
         return {"label": None, "snapshot_id": None, "rows_inserted": 0}
 
-    # --- 1) Create / upsert snapshot row (unchanged, still uses parameters) ---
+    # Local "today" in game/timezone
     now = datetime.now(TZ)
-    ts = now.strftime("%Y%m%d_%H%M%S")
-    label = f"daily_data_{ts}"
-    captured_at = now.isoformat()
+    today_str = now.date().isoformat()
 
-    log.info("[d1] Creating snapshot '%s' with %d rows", label, len(rows))
-
-    d1_query(
-        """
-        INSERT OR REPLACE INTO snapshots (label, captured_at)
-        VALUES (?, ?);
-        """,
-        [label, captured_at],
-    )
-
-    # --- 2) Fetch snapshot id (unchanged) ---
-    res = d1_query("SELECT id FROM snapshots WHERE label = ?;", [label])
-    try:
-        snapshot_id = res["result"][0]["results"][0]["id"]
-    except Exception as e:  # pragma: no cover - defensive
-        raise RuntimeError(
-            f"Could not read snapshot id from D1 response: {res}"
-        ) from e
-
-    # --- 2b) Upsert player & guild name mappings ---
+    # --- 1) Upsert player & guild name mappings (ALWAYS) -------------------
 
     player_names: dict[int, str] = {}
     guild_names: dict[int, str] = {}
@@ -201,7 +187,7 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
                 pass
 
     # Insert-only behaviour: INSERT OR IGNORE so we don't rewrite old names.
-    # (If you ever want renames, switch to ON CONFLICT(player_id) DO UPDATE.)
+    # (If you ever want renames, switch to ON CONFLICT(...) DO UPDATE.)
     if player_names:
         NAME_BATCH = 500
         ids = list(player_names.keys())
@@ -213,7 +199,7 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
                 values_parts.append(
                     "("
                     f"{sql_int(pid)}, "
-                    f"{sql_str(pname)} "
+                    f"{sql_str(pname)}"
                     ")"
                 )
 
@@ -236,7 +222,7 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
                 values_parts.append(
                     "("
                     f"{sql_int(gid)}, "
-                    f"{sql_str(gname)} "
+                    f"{sql_str(gname)}"
                     ")"
                 )
 
@@ -248,13 +234,75 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
             )
             d1_query(sql)
 
+    # --- 2) Check if a snapshot for today already exists -------------------
 
-    # --- 3) Batch-insert all player_stats rows using inline SQL literals ---
+    existing_snapshot: Mapping[str, Any] | None = None
+    try:
+        # captured_at is stored as ISO string, so substr(...,1,10) = 'YYYY-MM-DD'
+        res_check = d1_query(
+            """
+            SELECT id, label, captured_at
+            FROM snapshots
+            WHERE substr(captured_at, 1, 10) = ?
+            ORDER BY captured_at ASC
+            LIMIT 1;
+            """,
+            [today_str],
+        )
+        stmts = res_check.get("result") or []
+        if stmts:
+            rows0 = stmts[0].get("results") or []
+            if rows0:
+                existing_snapshot = rows0[0]
+    except Exception as e:
+        log.warning("[d1] Could not check for existing daily snapshot: %s", e)
+
+    if existing_snapshot is not None:
+        log.info(
+            "[d1] Snapshot already exists for today (id=%s, label='%s'); "
+            "skipping player_stats insert.",
+            existing_snapshot.get("id"),
+            existing_snapshot.get("label"),
+        )
+        return {
+            "label": existing_snapshot.get("label"),
+            "snapshot_id": existing_snapshot.get("id"),
+            "rows_inserted": 0,
+            "skipped": True,
+        }
+
+    # --- 3) Create new snapshot row ---------------------------------------
+
+    ts = now.strftime("%Y%m%d_%H%M%S")
+    label = f"daily_data_{ts}"
+    captured_at = now.isoformat()
+
+    log.info("[d1] Creating snapshot '%s' with %d rows", label, len(rows))
+
+    # Simple INSERT; we rely on the "one per day" guard above
+    d1_query(
+        """
+        INSERT INTO snapshots (label, captured_at)
+        VALUES (?, ?);
+        """,
+        [label, captured_at],
+    )
+
+    # --- 4) Fetch snapshot id ---------------------------------------------
+
+    res = d1_query("SELECT id FROM snapshots WHERE label = ?;", [label])
+    try:
+        snapshot_id = res["result"][0]["results"][0]["id"]
+    except Exception as e:  # pragma: no cover - defensive
+        raise RuntimeError(
+            f"Could not read snapshot id from D1 response: {res}"
+        ) from e
+
+    # --- 5) Batch-insert all player_stats rows using inline SQL literals ---
 
     # 6 numeric columns:
     #   snapshot_id, player_id, guild_id, era_nr, points, battles
     COLS_PER_ROW = 6
-    # Large but safe now that we don't use bound params; 8,7k rows -> ~9 statements
     BATCH_SIZE = 1000
 
     log.info(
@@ -270,7 +318,6 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         if not chunk:
             continue
 
-        # Build VALUES (...), (...), (...) with inline literals
         values_parts: list[str] = []
         for row in chunk:
             values_parts.append(
@@ -291,8 +338,6 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
             + ";"
         )
 
-        # Inline literals -> no bound params -> no 100-variable limit.
-        # Also far fewer statements -> much less chance of 429 throttling.
         d1_query(sql)
 
         total += len(chunk)

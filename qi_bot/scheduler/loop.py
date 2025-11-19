@@ -149,16 +149,7 @@ async def scheduler_loop(client: discord.Client):
 
 
 async def _run_daily_snapshot_if_due(channels, now: datetime):
-    """Fetch FoE data and push a daily snapshot into Cloudflare D1 at 04:00 local time.
-
-    Behaviour:
-      - runs once per day, within SEND_MISSED_WITHIN_MINUTES of 04:00
-      - on success: sends a ✅ confirmation message
-      - on error: sends a ❌ error message with a short description
-
-    The confirmation / error message is sent to the FIRST channel resolved
-    from settings.ALLOWED_CHANNEL_IDS (i.e. the first of DEFAULT_ALLOWED_CHANNEL_IDS).
-    """
+    """Fetch FoE data and push a daily snapshot into Cloudflare D1 at 04:00 local time."""
     # Compute today's 04:00 timestamp in TZ
     scheduled = datetime(now.year, now.month, now.day, 4, 00, tzinfo=TZ)
     key = f"d1-snapshot|{scheduled.date()}|04:00"
@@ -180,6 +171,16 @@ async def _run_daily_snapshot_if_due(channels, now: datetime):
     # Use first allowed channel (if any) for status messages
     target_channel = channels[0] if channels else None
 
+    await _run_snapshot_impl(target_channel, source="daily")
+
+
+async def _run_snapshot_impl(
+    target_channel: discord.abc.Messageable | None, source: str = "manual"
+):
+    """Core logic to fetch FoE data and insert a snapshot into D1.
+
+    Used by both the daily scheduler and manual `%sql` command.
+    """
     try:
         from qi_bot.utils.forge_scrape import fetch_players, build_daily_rows
         from qi_bot.utils.cloudfare_d1 import insert_daily_snapshot
@@ -197,21 +198,23 @@ async def _run_daily_snapshot_if_due(channels, now: datetime):
             label = result.get("label")
             count = result.get("rows_inserted")
             snapshot_id = result.get("snapshot_id")
+            prefix = "✅ Daily FoE snapshot" if source == "daily" else "✅ Manual FoE snapshot"
             await target_channel.send(
-                f"✅ Daily FoE snapshot stored in D1:\n"
+                f"{prefix} stored in D1:\n"
                 f"- Label: **{label}**\n"
                 f"- Rows: **{count}**\n"
                 f"- Snapshot ID: `{snapshot_id}`"
             )
 
         log.info(
-            "[d1] ✅ Snapshot %s stored with %s rows",
+            "[d1] ✅ Snapshot (%s) %s stored with %s rows",
+            source,
             result.get("snapshot_id"),
             result.get("rows_inserted"),
         )
 
     except Exception as e:  # ❌ ERROR PATH
-        log.exception("[d1] ❌ Daily snapshot failed: %s", e)
+        log.exception("[d1] ❌ %s snapshot failed: %s", source, e)
 
         if target_channel:
             # Build a short, safe error description
@@ -223,12 +226,17 @@ async def _run_daily_snapshot_if_due(channels, now: datetime):
 
             try:
                 await target_channel.send(
-                    "❌ Daily FoE snapshot **FAILED**.\n"
+                    f"❌ { 'Daily' if source == 'daily' else 'Manual' } FoE snapshot **FAILED**.\n"
                     f"Error: `{combined}`\n"
                     "Check Render logs for full stack trace."
                 )
             except Exception as send_err:
                 log.error("[d1] Could not send error message to Discord: %s", send_err)
+
+
+async def run_manual_snapshot(target_channel: discord.abc.Messageable):
+    """Public helper: run a manual FoE → D1 snapshot now, reporting to the given channel."""
+    await _run_snapshot_impl(target_channel, source="manual")
 
 
 def start_scheduler(client: discord.Client):
@@ -243,3 +251,5 @@ def start_scheduler(client: discord.Client):
 send_preview = _send_preview
 send_full_now = _send_full_now
 cycle_day_for_public = cycle_day_for
+# new export for commands
+run_manual_snapshot_public = run_manual_snapshot

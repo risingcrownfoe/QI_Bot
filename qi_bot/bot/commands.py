@@ -10,7 +10,9 @@ from qi_bot.scheduler.loop import (
     start_scheduler,
     send_full_now,
     cycle_day_for_public,
+    run_manual_snapshot_public,
 )
+
 from qi_bot.schedule.loader import (
     load_schedule_if_changed,
     get_events_for_day,
@@ -56,12 +58,17 @@ COMMAND_ALIASES = {
     "next": {
         "en": ["%next"],
         "de": ["%nächster"],
-        "hidden": ["%naechster"]  # accepted, not shown in help
+        "hidden": ["%naechster", "%n"]  # accepted, not shown in help
     },
     "step": {
         "en": ["%step"],
         "de": ["%schritt"],
         "hidden": ["%s"]
+    },
+    "sql": {
+        "en": ["%sql"],
+        "de": ["%sql"],
+        "hidden": []
     },
 }
 
@@ -131,6 +138,8 @@ def register_handlers(client: discord.Client) -> None:
             await _handle_next(message)
         elif cmd_key == "step":
             await _handle_step(message, raw, lang, trigger)
+        elif cmd_key == "sql":
+            await _handle_sql(message)
 
 
 # -------- Help builders (English/German menus split) --------
@@ -309,6 +318,11 @@ async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias
         )
         return
     await send_full_now(message.channel, evs[n - 1])
+
+async def _handle_sql(message: discord.Message):
+    """Manually trigger a FoE → D1 snapshot (%sql)."""
+    # Optionally, you could send a 'starting...' message here.
+    await run_manual_snapshot_public(message.channel)
 
 
 # -------- Usage messages (lang-specific, no angle brackets) --------
