@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, List
 
 from qi_bot.utils.cloudfare_d1 import d1_query
+from qi_bot.utils.foe_eras import era_str_from_nr
 
 log = logging.getLogger("qi-bot")
 
@@ -34,13 +35,31 @@ def fetch_snapshots() -> List[Dict[str, Any]]:
 def fetch_players_for_snapshot(snapshot_id: int) -> List[Dict[str, Any]]:
     """Return all player rows for the given snapshot.
 
-    Each item: { "player_id", "guild_id", "era_nr", "points", "battles" }
+    Each item includes:
+        - player_id
+        - player_name (if known)
+        - guild_id
+        - guild_name (if known)
+        - era_nr
+        - era   (string, e.g. "IronAge")
+        - points
+        - battles
     """
     sql = """
-        SELECT player_id, guild_id, era_nr, points, battles
-        FROM player_stats
-        WHERE snapshot_id = ?;
+        SELECT
+            ps.player_id,
+            pn.player_name AS player_name,
+            ps.guild_id,
+            gn.guild_name AS guild_name,
+            ps.era_nr,
+            ps.points,
+            ps.battles
+        FROM player_stats AS ps
+        LEFT JOIN player_names AS pn ON ps.player_id = pn.player_id
+        LEFT JOIN guild_names AS gn ON ps.guild_id = gn.guild_id
+        WHERE ps.snapshot_id = ?;
     """
+
     res = d1_query(sql, [snapshot_id])
 
     statements = res.get("result") or []
@@ -48,4 +67,15 @@ def fetch_players_for_snapshot(snapshot_id: int) -> List[Dict[str, Any]]:
         return []
 
     rows = statements[0].get("results") or []
+
+    # Attach human-readable era string
+    for row in rows:
+        era_nr = row.get("era_nr")
+        try:
+            era_nr_int = int(era_nr) if era_nr is not None else 0
+        except Exception:
+            era_nr_int = 0
+
+        row["era"] = era_str_from_nr(era_nr_int) or "Unknown"
+
     return rows

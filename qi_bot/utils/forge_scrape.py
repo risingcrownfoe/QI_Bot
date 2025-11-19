@@ -7,45 +7,19 @@ our Cloudflare D1 database.
 """
 
 from __future__ import annotations
-
-import logging
 from typing import Any, Dict, List
-
 import requests
+import logging
+
+from qi_bot.utils.foe_eras import era_nr_from_str
 
 log = logging.getLogger("qi-bot")
 
 API_URL = (
-    "https://api.dev.forge-db.com/api/datatables/players/de/de14"
-    "?draw=1&start=0&length=-1"
+    "https://api.dev.forge-db.com/api/datatables/players/de/de14?draw=1&start=0&length=-1"
 )
 
 # Same order as used in the offline converter / SQLite import
-ERA_ORDER = [
-    "IronAge",
-    "EarlyMiddleAge",
-    "HighMiddleAge",
-    "LateMiddleAge",
-    "ColonialAge",
-    "IndustrialAge",
-    "ProgressiveEra",
-    "ModernEra",
-    "PostModernEra",
-    "ContemporaryEra",
-    "TomorrowEra",
-    "FutureEra",
-    "ArcticFuture",
-    "OceanicFuture",
-    "VirtualFuture",
-    "SpaceAgeMars",
-    "SpaceAgeAsteroidBelt",
-    "SpaceAgeVenus",
-    "SpaceAgeJupiterMoon",
-    "SpaceAgeTitan",
-    "SpaceAgeSpaceHub",
-]
-_ERA_INDEX = {era: i + 1 for i, era in enumerate(ERA_ORDER)}
-
 
 def fetch_players(timeout: int = 60) -> list[dict[str, Any]]:
     """Fetch all player rows from Forge-DB.
@@ -73,7 +47,7 @@ def _coerce_int(value: Any, default: int = 0) -> int:
 def _extract_era_nr(player: Dict[str, Any]) -> int:
     raw = player.get("raw") or {}
     era_str = str(raw.get("era", "")).strip()
-    return _ERA_INDEX.get(era_str, 0)  # 0 = unknown / not mapped
+    return era_nr_from_str(era_str)
 
 
 def build_daily_rows(
@@ -100,11 +74,13 @@ def build_daily_rows(
     for p in rows:
         # The API uses either "player_id" or "playerId" depending on version;
         # support both just in case.
-        player_id = _coerce_int(p.get("player_id") or p.get("playerId"), default=0)
+        player_name = str(p.get("name")).strip()
+        player_id = _coerce_int(p.get("player_id"), default=0)
         if player_id <= 0:
             continue
 
-        guild_id_raw = p.get("guild_id") or p.get("guildId") or 0
+        guild_name = str(p.get("guild_name")).strip()
+        guild_id_raw = p.get("guild_id") or 0
         guild_id = _coerce_int(guild_id_raw, default=0)
 
         points = _coerce_int(p.get("points"), default=0)
@@ -122,6 +98,8 @@ def build_daily_rows(
                 "era_nr": era_nr,
                 "points": points,
                 "battles": battles,
+                "player_name": player_name,
+                "guild_name": guild_name,
             }
         )
         kept += 1

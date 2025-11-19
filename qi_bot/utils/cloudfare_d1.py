@@ -114,9 +114,6 @@ def d1_query(sql: str, params: Sequence[Any] | None = None) -> Mapping[str, Any]
 
     return data
 
-
-from typing import Any, List, Mapping
-
 def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
     """Insert one daily snapshot plus all corresponding player_stats rows.
 
@@ -129,6 +126,29 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
 
     Returns a small dict with snapshot label, id and inserted row count.
     """
+
+    def sql_int(v: Any) -> str:
+        """Convert a value to a safe integer literal for SQL.
+
+        All these columns are numeric in the schema and come from the FoE API.
+        We coerce to int; on weird values we fall back to 0 or NULL.
+        """
+        if v is None:
+            return "NULL"
+        try:
+            return str(int(v))
+        except Exception:
+            return "0"
+
+    def sql_str(v: Any) -> str:
+        """Convert a value to a safe TEXT literal for SQL."""
+        if v is None:
+            return "NULL"
+        s = str(v)
+        # Basic escaping: ' -> ''  (SQLite standard)
+        s = s.replace("'", "''")
+        return f"'{s}'"
+
     if not rows:
         log.warning("[d1] No rows to insert; skipping snapshot.")
         return {"label": None, "snapshot_id": None, "rows_inserted": 0}
@@ -158,6 +178,77 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
             f"Could not read snapshot id from D1 response: {res}"
         ) from e
 
+    # --- 2b) Upsert player & guild name mappings ---
+
+    player_names: dict[int, str] = {}
+    guild_names: dict[int, str] = {}
+
+    for row in rows:
+        pid = row.get("player_id")
+        pname = row.get("player_name")
+        if pid and pname:
+            try:
+                player_names[int(pid)] = str(pname)
+            except Exception:
+                pass
+
+        gid = row.get("guild_id")
+        gname = row.get("guild_name")
+        if gid and gname:
+            try:
+                guild_names[int(gid)] = str(gname)
+            except Exception:
+                pass
+
+    # Insert-only behaviour: INSERT OR IGNORE so we don't rewrite old names.
+    # (If you ever want renames, switch to ON CONFLICT(player_id) DO UPDATE.)
+    if player_names:
+        NAME_BATCH = 500
+        ids = list(player_names.keys())
+        for start_idx in range(0, len(ids), NAME_BATCH):
+            chunk_ids = ids[start_idx : start_idx + NAME_BATCH]
+            values_parts: list[str] = []
+            for pid in chunk_ids:
+                pname = player_names[pid]
+                values_parts.append(
+                    "("
+                    f"{sql_int(pid)}, "
+                    f"{sql_str(pname)} "
+                    ")"
+                )
+
+            sql = (
+                "INSERT OR IGNORE INTO player_names "
+                "(player_id, player_name) VALUES\n"
+                + ",\n".join(values_parts)
+                + ";"
+            )
+            d1_query(sql)
+
+    if guild_names:
+        NAME_BATCH = 500
+        ids = list(guild_names.keys())
+        for start_idx in range(0, len(ids), NAME_BATCH):
+            chunk_ids = ids[start_idx : start_idx + NAME_BATCH]
+            values_parts: list[str] = []
+            for gid in chunk_ids:
+                gname = guild_names[gid]
+                values_parts.append(
+                    "("
+                    f"{sql_int(gid)}, "
+                    f"{sql_str(gname)} "
+                    ")"
+                )
+
+            sql = (
+                "INSERT OR IGNORE INTO guild_names "
+                "(guild_id, guild_name) VALUES\n"
+                + ",\n".join(values_parts)
+                + ";"
+            )
+            d1_query(sql)
+
+
     # --- 3) Batch-insert all player_stats rows using inline SQL literals ---
 
     # 6 numeric columns:
@@ -171,19 +262,6 @@ def insert_daily_snapshot(rows: List[Mapping[str, Any]]) -> dict[str, Any]:
         BATCH_SIZE,
         BATCH_SIZE * COLS_PER_ROW,
     )
-
-    def sql_int(v: Any) -> str:
-        """Convert a value to a safe integer literal for SQL.
-
-        All these columns are numeric in the schema and come from the FoE API.
-        We coerce to int; on weird values we fall back to 0 or NULL.
-        """
-        if v is None:
-            return "NULL"
-        try:
-            return str(int(v))
-        except Exception:
-            return "0"
 
     total = 0
 
