@@ -40,6 +40,16 @@ DAYCODE_TO_DAYNUM = {
     "mi": 7,  # Mittwoch
 }
 
+DAYNUM_TO_NAME_DE = {
+    1: "Donnerstag",
+    2: "Freitag",
+    3: "Samstag",
+    4: "Sonntag",
+    5: "Montag",
+    6: "Dienstag",
+    7: "Mittwoch",
+}
+
 HALF_TOKENS_MORNING = ("früh", "frueh")   # with / without umlaut
 HALF_TOKENS_EVENING = ("spät", "spaet")
 
@@ -530,9 +540,11 @@ async def _handle_half_day(message: discord.Message, lang: str, used_alias: str)
             )
         return
 
+    weekday_de = DAYNUM_TO_NAME_DE.get(daynum, f"Tag {daynum}")
+
     if lang == "de":
-        part_label = "Vormittag" if half == "morning" else "Nachmittag/Abend"
-        header = f"**Tag {daynum} – {part_label}:**"
+        part_label = "Morgen" if half == "morning" else "Abend"
+        header = f"**Tag {daynum} – {weekday_de} {part_label}:**"
     else:
         part_label = "morning" if half == "morning" else "afternoon/evening"
         header = f"**Day {daynum} – {part_label}:**"
