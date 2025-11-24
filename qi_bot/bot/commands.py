@@ -27,8 +27,145 @@ except ImportError:
 
 TZ = ZoneInfo(settings.TIMEZONE)
 
-# Define visible aliases per language and hidden ones here; the router builds maps from this.
+# --- Half-day helpers (DE only) ---
 
+# Two-letter German day codes → QI day numbers
+DAYCODE_TO_DAYNUM = {
+    "do": 1,  # Donnerstag
+    "fr": 2,  # Freitag
+    "sa": 3,  # Samstag
+    "so": 4,  # Sonntag
+    "mo": 5,  # Montag
+    "di": 6,  # Dienstag
+    "mi": 7,  # Mittwoch
+}
+
+HALF_TOKENS_MORNING = ("früh", "frueh")   # with / without umlaut
+HALF_TOKENS_EVENING = ("spät", "spaet")
+
+
+def _parse_halfday_from_alias(used_alias: str):
+    """
+    Parse something like '%dofrüh' / '%dofrueh' / '%dospaet' into
+    (daynum:int, half:str|'morning'|'evening'|None).
+
+    Returns (None, None) on parse error.
+    """
+    alias = used_alias.strip().lower()
+    if alias.startswith("%"):
+        alias = alias[1:]
+
+    if len(alias) < 3:
+        return None, None
+
+    day_code = alias[:2]       # 'do', 'fr', 'sa', ...
+    half_token = alias[2:]     # 'früh', 'frueh', 'spät', 'spaet', ...
+
+    daynum = DAYCODE_TO_DAYNUM.get(day_code)
+    if daynum is None:
+        return None, None
+
+    if half_token in HALF_TOKENS_MORNING:
+        half = "morning"
+    elif half_token in HALF_TOKENS_EVENING:
+        half = "evening"
+    else:
+        half = None
+
+    return daynum, half
+
+
+# -------- Helpers --------
+def _norm_events_for_day_struct(day_struct):
+    """Accepts either a list (old shape) or an object {title?, notes?, events: []}; returns events list + optional day title/notes."""
+    day_title = None
+    day_notes = None
+    if isinstance(day_struct, dict):
+        events = day_struct.get("events", [])
+        day_title = day_struct.get("title")
+        day_notes = day_struct.get("notes")
+    else:
+        events = day_struct or []
+    return events, day_title, day_notes
+
+
+def _all_days_iter(schedule_data):
+    """Yield (day_index:int, events:list, day_title:str|None). Days sorted by number."""
+    days = schedule_data.get("days", {})
+    for d_key in sorted(days, key=lambda x: int(x)):
+        evs, day_title, _ = _norm_events_for_day_struct(days[d_key])
+        yield int(d_key), evs, day_title
+
+
+def _fmt_time_and_optional_title(ev, idx=None):
+    """Return 'N. HH:MM Uhr: <title>' or 'HH:MM Uhr:' (no title) according to request."""
+    hhmm = ev.get("time", "??:??")
+    title = ev.get("title")  # may be None
+    prefix = f"{idx}. " if idx is not None else ""
+    if title:
+        return f"{prefix}{hhmm} Uhr: {title}"
+    else:
+        return f"{prefix}{hhmm} Uhr:"
+
+
+def _find_now_and_next_for_today(now_dt):
+    """Return (latest_ev_or_None, next_ev_or_None, today_daynum) limited to *today only*."""
+    today = now_dt.date()
+    daynum = cycle_day_for_public(today)
+    events = get_events_for_day(daynum)
+    latest = None
+    nxt = None
+    for ev in events:
+        hh, mm = map(int, ev["time"].split(":"))
+        ev_dt = now_dt.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if ev_dt <= now_dt:
+            latest = ev
+        else:
+            nxt = ev
+            break
+    return latest, nxt, daynum
+
+
+def _find_first_event_after_today(now_dt):
+    """Find the next day with events after today; scan up to one full cycle."""
+    for step in range(1, settings.CYCLE_LENGTH + 1):
+        dt = now_dt + timedelta(days=step)
+        dnum = cycle_day_for_public(dt.date())
+        evs = get_events_for_day(dnum)
+        if evs:
+            return dnum, evs[0]
+    return None, None
+
+
+def _find_most_recent_event_across_days(now_dt):
+    """
+    Find the most recent event at or before 'now', scanning backwards up to one full cycle.
+    Returns (event_or_None, daynum_or_None, event_datetime_or_None).
+    """
+    best_ev = None
+    best_dt = None
+    best_daynum = None
+
+    for days_back in range(0, settings.CYCLE_LENGTH):  # include today
+        dt_day = now_dt - timedelta(days=days_back)
+        dnum = cycle_day_for_public(dt_day.date())
+        evs = get_events_for_day(dnum)
+        if not evs:
+            continue
+        for ev in evs:
+            try:
+                hh, mm = map(int, ev["time"].split(":"))
+            except Exception:
+                continue
+            ev_dt = dt_day.replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if ev_dt <= now_dt and (best_dt is None or ev_dt > best_dt):
+                best_ev = ev
+                best_dt = ev_dt
+                best_daynum = dnum
+
+    return best_ev, best_daynum, best_dt
+
+# Define visible aliases per language and hidden ones here; the router builds maps from this.
 COMMAND_ALIASES = {
     "help": {
         "en": ["%help"],
@@ -70,6 +207,28 @@ COMMAND_ALIASES = {
         "de": ["%sql"],
         "hidden": []
     },
+    "halfday": {
+        "en": [],  # no EN commands for now
+        "de": [
+            "%dofrüh", "%dospät",
+            "%frfrüh", "%frspät",
+            "%safrüh", "%saspät",
+            "%sofrüh", "%sospät",
+            "%mofrüh", "%mospät",
+            "%difrüh", "%dispät",
+            "%mifrüh", "%mispät",
+        ],
+        # ASCII fallbacks without umlauts (hidden in help)
+        "hidden": [
+            "%dofrueh", "%dospaet",
+            "%frfrueh", "%frspaet",
+            "%safrueh", "%saspaet",
+            "%sofrueh", "%sospaet",
+            "%mofrueh", "%mospaet",
+            "%difrueh", "%dispaet",
+            "%mifrueh", "%mispaet",
+        ],
+    },
 }
 
 # Build a fast lookup: alias -> (cmd_key, lang, is_hidden)
@@ -98,9 +257,10 @@ def register_handlers(client: discord.Client) -> None:
         if message.channel.id not in settings.ALLOWED_CHANNEL_IDS:
             return
 
-        content = message.content.strip()
-        if not content.startswith("%"):
+        raw = message.content.strip()
+        if not raw:
             return
+        content = raw.lower()
 
         # Determine the trigger token (first word)
         trigger = content.split()[0]
@@ -140,6 +300,8 @@ def register_handlers(client: discord.Client) -> None:
             await _handle_step(message, raw, lang, trigger)
         elif cmd_key == "sql":
             await _handle_sql(message)
+        elif cmd_key == "halfday":
+            await _handle_half_day(message, lang, trigger)
 
 
 # -------- Help builders (English/German menus split) --------
@@ -196,9 +358,17 @@ async def _handle_help(message: discord.Message, lang: str):
 
 
 async def _handle_today(message: discord.Message):
-    today = datetime.now(TZ).date()
-    await _handle_day(message, f"%day {cycle_day_for_public(today)}", "de", "%day")
+    now = datetime.now(TZ)
+    daynum = cycle_day_for_public(now.date())
+    evs = get_events_for_day(daynum)
+    if not evs:
+        await message.channel.send(f"**Heute (Tag {daynum}):** keine Schritte geplant.")
+        return
 
+    lines = []
+    for i, ev in enumerate(evs, start=1):
+        lines.append(_fmt_time_and_optional_title(ev, idx=i))
+    await message.channel.send(f"**Heute (Tag {daynum}):**\n" + "\n".join(lines))
 
 async def _handle_day(message: discord.Message, raw: str, lang: str, used_alias: str):
     parts = raw.split()
@@ -210,77 +380,60 @@ async def _handle_day(message: discord.Message, raw: str, lang: str, used_alias:
     except ValueError:
         await message.channel.send(_usage_day(lang))
         return
+
     evs = get_events_for_day(d)
     if not evs:
-        if lang == "de":
-            await message.channel.send(f"**Tag {d}:** keine Schritte geplant.")
-        else:
-            await message.channel.send(f"**Day {d}:** no steps scheduled.")
+        await message.channel.send(f"**Tag {d}:** keine Schritte geplant.")
         return
-    date_for_day = datetime.now(TZ).date()
-    await message.channel.send(
-        f"**Tag {d} ({date_for_day.isoformat()}):** {len(evs)} Schritte geplant."
-    )
-    for ev in evs:
-        await send_full_now(message.channel, ev)
 
+    lines = []
+    for i, ev in enumerate(evs, start=1):
+        lines.append(_fmt_time_and_optional_title(ev, idx=i))
+    await message.channel.send(f"**Tag {d}:**\n" + "\n".join(lines))
 
 async def _handle_all(message: discord.Message):
-    lines = []
-    for step in range(settings.CYCLE_LENGTH):
-        d = step + 1
-        evs = get_events_for_day(d)
+    # We want all days with time + (optional) title
+    from qi_bot.schedule.loader import schedule_data as _sd  # local import to avoid cycles
+    days_dict = _sd.get("days", {})
+    if not days_dict:
+        await message.channel.send("Keine Daten verfügbar.")
+        return
+
+    chunks = []
+    for d, evs, day_title in _all_days_iter(_sd):
         if not evs:
             continue
-        lines.append(f"**Tag {d}:** {len(evs)} Schritte geplant.")
-    if not lines:
-        await message.channel.send("Keine geplanten Schritte gefunden.")
-    else:
-        await message.channel.send("\n".join(lines))
+        header = f"**Tag {d}**" + (f" — {day_title}" if day_title else "")
+        lines = [_fmt_time_and_optional_title(ev) for ev in evs]
+        chunks.append(header + "\n" + "\n".join(lines))
+
+    await message.channel.send("\n\n".join(chunks) if chunks else "Keine Daten verfügbar.")
 
 
-def _find_now_and_next_for_today(now_dt):
-    daynum = cycle_day_for_public(now_dt.date())
-    evs = get_events_for_day(daynum)
-    latest = None
-    nxt = None
-    for ev in evs:
-        t = ev.get("time")
-        if not t:
-            continue
-        try:
-            hh, mm = map(int, t.split(":"))
-        except Exception:
-            continue
-        ev_dt = now_dt.replace(hour=hh, minute=mm, second=0, microsecond=0)
-        if ev_dt <= now_dt:
-            latest = ev
-        else:
-            nxt = ev
-            break
-    return latest, nxt, daynum
-
-
-def _find_first_event_after_today(now_dt):
-    """Find the next day with events after today; scan up to one full cycle."""
-    for step in range(1, settings.CYCLE_LENGTH + 1):
-        dt = now_dt + timedelta(days=step)
-        dnum = cycle_day_for_public(dt.date())
-        evs = get_events_for_day(dnum)
-        if evs:
-            return dnum, evs[0]
-    return None, None
 
 
 async def _handle_now(message: discord.Message):
     now = datetime.now(TZ)
-    latest, _, daynum = _find_now_and_next_for_today(now)
-    if latest:
-        await send_full_now(message.channel, latest)
+
+    # NEW: search backwards across days (up to CYCLE_LENGTH) for the most recent event
+    most_recent, mr_daynum, mr_dt = _find_most_recent_event_across_days(now)
+
+    if most_recent:
+        await send_full_now(message.channel, most_recent)
+        return
+
+    # Fallbacks if nothing found in the past window (unlikely if schedule is populated)
+    _, nxt, daynum = _find_now_and_next_for_today(now)
+    if nxt:
+        hhmm = nxt.get("time", "??:??")
+        await message.channel.send(f"Heute noch nichts fällig. Nächster Schritt (Tag {daynum}): **{hhmm} Uhr**.")
+        return
+
+    d2, first = _find_first_event_after_today(now)
+    if d2 and first:
+        await message.channel.send(f"Heute keine Schritte. Nächster Tag mit Inhalt: **Tag {d2}**, {first.get('time','??:??')} Uhr.")
     else:
-        await message.channel.send(
-            f"**Tag {daynum}:** kein bereits gesendeter Schritt gefunden."
-        )
+        await message.channel.send("Keine weiteren Schritte gefunden.")
 
 
 async def _handle_next(message: discord.Message):
@@ -313,11 +466,84 @@ async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias
         await message.channel.send(f"**Tag {d}:** keine Schritte geplant.")
         return
     if not (1 <= n <= len(evs)):
-        await message.channel.send(
-            f"Tag {d} hat **{len(evs)}** Schritte. Index **{n}** ist ungültig."
-        )
+        await message.channel.send(f"Tag {d} hat **{len(evs)}** Schritte. Index **{n}** ist ungültig.")
         return
     await send_full_now(message.channel, evs[n - 1])
+
+async def _handle_half_day(message: discord.Message, lang: str, used_alias: str):
+    """
+    Handle commands like %dofrüh, %dospät, %frfrüh, %frspät, ...
+    All of them are routed here via the 'halfday' command key.
+    """
+    daynum, half = _parse_halfday_from_alias(used_alias)
+
+    # Should not happen if aliases & parser are in sync, but be defensive.
+    if daynum is None or half is None:
+        if lang == "de":
+            await message.channel.send(
+                "Konnte aus dem Befehl den Tag / Halbtag nicht erkennen. "
+                "Beispiele: `%dofrüh`, `%dospät`, `%frfrüh`, `%frspät`."
+            )
+        else:
+            await message.channel.send(
+                "Could not parse day / half-day from command."
+            )
+        return
+
+    evs = get_events_for_day(daynum)
+    if not evs:
+        if lang == "de":
+            await message.channel.send(f"**Tag {daynum}:** keine Schritte geplant.")
+        else:
+            await message.channel.send(f"**Day {daynum}:** no steps scheduled.")
+        return
+
+    # Decide which events belong to the half-day
+    def _is_in_half(ev):
+        t = ev.get("time")
+        if not t:
+            return False
+        try:
+            hh, mm = map(int, t.split(":"))
+        except Exception:
+            return False
+
+        # Convention: 'früh' = strictly before 12:00,
+        # 'spät' = 12:00 and later
+        if half == "morning":
+            return hh < 12
+        else:  # "evening"
+            return hh >= 12
+
+    selected = [ev for ev in evs if _is_in_half(ev)]
+
+    if not selected:
+        if lang == "de":
+            part_label = "Vormittag" if half == "morning" else "Nachmittag/Abend"
+            await message.channel.send(
+                f"**Tag {daynum} ({part_label})**: keine Schritte in diesem Zeitraum."
+            )
+        else:
+            part_label = "morning" if half == "morning" else "afternoon/evening"
+            await message.channel.send(
+                f"**Day {daynum} ({part_label})**: no steps in this time window."
+            )
+        return
+
+    if lang == "de":
+        part_label = "Vormittag" if half == "morning" else "Nachmittag/Abend"
+        header = f"**Tag {daynum} – {part_label}:**"
+    else:
+        part_label = "morning" if half == "morning" else "afternoon/evening"
+        header = f"**Day {daynum} – {part_label}:**"
+
+    # One short header + all full messages for that half-day in order
+    await message.channel.send(header)
+    for ev in selected:
+        await send_full_now(message.channel, ev)
+
+
+
 
 async def _handle_sql(message: discord.Message):
     """Manually trigger a FoE → D1 snapshot (%sql)."""
