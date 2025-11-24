@@ -28,7 +28,7 @@
       { /* Alchemistenlabor erst 1h später fertig */
         "time": "22:00",
         "title": "⏰ Reminder, Stadt nochmal öffnen",
-        "use": "reminder_build_complete"
+        "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob **Alchemistenlabor** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
       }
     ],
 
@@ -48,7 +48,7 @@
       { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
         "time": "10:00",
         "title": "⏰ Reminder, Stadt nochmal öffnen",
-        "use": "reminder_build_complete"
+        "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob **Fachwerkhaus** und **Alchemistenlabor** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
       },
       {
         "time": "20:00",
@@ -65,7 +65,7 @@
       { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
         "time": "22:00",
         "title": "⏰ Reminder, Stadt nochmal öffnen",
-        "use": "reminder_build_complete"
+        "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob **Fachwerkhaus** und **Alchemistenlabor** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
       }
     ],
 
@@ -79,7 +79,7 @@
       { /* Alchemistenlabore erst 1h später fertig */
         "time": "09:00",
         "title": "⏰ Reminder, Stadt nochmal öffnen",
-        "use": "reminder_build_complete"
+        "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob **Alchemistenlabore** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
       },
       {
         "time": "20:00",
@@ -90,7 +90,7 @@
       { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
         "time": "21:00",
         "title": "⏰ Reminder, Stadt nochmal öffnen",
-        "use": "reminder_build_complete"
+        "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob **Fachwerkhäuser** und **Alchemistenlabore** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
       }
     ],
 
@@ -110,7 +110,7 @@
       { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
         "time": "10:00",
         "title": "⏰ Reminder, Stadt nochmal öffnen",
-        "use": "reminder_build_complete"
+        "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob **Fachwerkhäuser** und **Alchemistenlabore** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
       },
       {
         "time": "20:00",

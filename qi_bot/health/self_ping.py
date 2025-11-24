@@ -51,6 +51,6 @@ def start_self_ping():
             except Exception as e:
                 dt_ms = int((pytime.time() - t0) * 1000)
                 log.error("[self-ping] ERROR after %dms | %s", dt_ms, e)
-            pytime.sleep(60)
+            pytime.sleep(180)
 
     threading.Thread(target=loop, daemon=True).start()
