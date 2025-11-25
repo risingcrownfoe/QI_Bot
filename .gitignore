@@ -25,3 +25,7 @@ ENV/
 
 # Local env (DO NOT COMMIT)
 .env
+
+# one time files
+import_player_recruitment.py
+player_recruitment_import_v2.csv

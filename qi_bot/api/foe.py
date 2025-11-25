@@ -44,6 +44,9 @@ def fetch_players_for_snapshot(snapshot_id: int) -> List[Dict[str, Any]]:
         - era   (string, e.g. "IronAge")
         - points
         - battles
+        - recruitment_status             (from player_recruitment.status, if any)
+        - recruitment_note               (from player_recruitment.note, if any)
+        - recruitment_last_contacted_at  (ISO date string, if any)
     """
     sql = """
         SELECT
@@ -53,10 +56,14 @@ def fetch_players_for_snapshot(snapshot_id: int) -> List[Dict[str, Any]]:
             gn.guild_name AS guild_name,
             ps.era_nr,
             ps.points,
-            ps.battles
+            ps.battles,
+            pr.status AS recruitment_status,
+            pr.note AS recruitment_note,
+            pr.last_contacted_at AS recruitment_last_contacted_at
         FROM player_stats AS ps
-        LEFT JOIN player_names AS pn ON ps.player_id = pn.player_id
-        LEFT JOIN guild_names AS gn ON ps.guild_id = gn.guild_id
+        LEFT JOIN player_names       AS pn ON ps.player_id = pn.player_id
+        LEFT JOIN guild_names        AS gn ON ps.guild_id = gn.guild_id
+        LEFT JOIN player_recruitment AS pr ON ps.player_id = pr.player_id
         WHERE ps.snapshot_id = ?;
     """
 
