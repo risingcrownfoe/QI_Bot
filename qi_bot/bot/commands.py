@@ -50,8 +50,8 @@ DAYNUM_TO_NAME_DE = {
     7: "Mittwoch",
 }
 
-HALF_TOKENS_MORNING = ("früh", "frueh")   # with / without umlaut
-HALF_TOKENS_EVENING = ("spät", "spaet")
+HALF_TOKENS_MORNING = ("früh", "frueh", "morgen")   # with / without umlaut
+HALF_TOKENS_EVENING = ("spät", "spaet", "abend")
 
 
 def _parse_halfday_from_alias(used_alias: str):
