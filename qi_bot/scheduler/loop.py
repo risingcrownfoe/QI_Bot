@@ -5,7 +5,7 @@ from typing import Set
 
 import discord
 
-from qi_bot.config import settings
+from qi_bot.config import settings, get_plan_for_channel
 from qi_bot.schedule.loader import (
     load_schedule_if_changed,
     get_events_for_day,
@@ -33,26 +33,50 @@ def cycle_day_for(d: date) -> int:
     return (delta % settings.CYCLE_LENGTH) + 1
 
 
-async def _ensure_channels(client: discord.Client):
-    channels = []
-    for cid in settings.ALLOWED_CHANNEL_IDS:
-        ch = client.get_channel(cid)
-        if ch is None:
-            try:
-                ch = await client.fetch_channel(cid)
-            except Exception as e:
-                log.error("[init] Could not fetch channel %s: %s", cid, e)
-                continue
-        channels.append(ch)
-    if not channels:
-        raise RuntimeError("No valid channels from ALLOWED_CHANNEL_IDS.")
-    return channels
+async def _ensure_channels_per_plan(client: discord.Client):
+    """Resolve Discord channel objects for each plan.
+
+    Returns a list of (plan, [channels...]) tuples.
+    """
+    plans_with_channels: list[tuple[object, list[discord.abc.Messageable]]] = []
+
+    for plan in settings.SCHEDULE_PLANS:
+        plan_channels: list[discord.abc.Messageable] = []
+        for cid in plan.channel_ids:
+            ch = client.get_channel(cid)
+            if ch is None:
+                try:
+                    ch = await client.fetch_channel(cid)
+                except Exception as e:
+                    log.error("[init] Could not fetch channel %s for plan %s: %s", cid, plan.name, e)
+                    continue
+            plan_channels.append(ch)
+
+        if not plan_channels:
+            log.warning(
+                "[init] No valid channels found for plan %s (%s)",
+                plan.name,
+                plan.schedule_file,
+            )
+
+        plans_with_channels.append((plan, plan_channels))
+
+    return plans_with_channels
 
 
 async def _send_event(
-    channel: discord.abc.Messageable, when_dt: datetime, raw_event: dict, idx: int
+    channel: discord.abc.Messageable,
+    when_dt: datetime,
+    raw_event: dict,
+    idx: int,
+    schedule_file: str | None = None
 ):
-    event = resolve_event(raw_event, get_schedule_data())
+    # If schedule_file not given (e.g. called from preview), infer from channel
+    if schedule_file is None:
+        plan = get_plan_for_channel(getattr(channel, "id", 0))
+        schedule_file = plan.schedule_file if plan else None
+
+    event = resolve_event(raw_event, get_schedule_data(schedule_file))
     text = (event.get("text") or "").strip()
     files = [discord.File(fp) for fp in collect_files(event.get("image"))]
 
@@ -75,20 +99,29 @@ async def _send_event(
 async def _send_preview(channel: discord.abc.Messageable, for_date: date):
     """Used by %today and %day to preview what will be sent on a given date."""
     daynum = cycle_day_for(for_date)
-    events = get_events_for_day(daynum)
+
+    plan = get_plan_for_channel(getattr(channel, "id", 0))
+    schedule_file = plan.schedule_file if plan else None
+
+    events = get_events_for_day(daynum, schedule_file=schedule_file)
     if not events:
         await channel.send(f"**Tag {daynum}**: keine Schritte geplant.")
         return
+
     header = f"**Tag {daynum} ({for_date.isoformat()}):** {len(events)} Schritte geplant.\n"
     await channel.send(header)
+
     for idx, ev in enumerate(events):
         dt = datetime(for_date.year, for_date.month, for_date.day, tzinfo=TZ)
-        await _send_event(channel, dt, ev, idx)
+        await _send_event(channel, dt, ev, idx, schedule_file=schedule_file)
 
 
 async def _send_full_now(channel: discord.abc.Messageable, raw_event: dict):
     """Send a full event immediately (used by %now, %next, %step)."""
-    ev = resolve_event(raw_event, get_schedule_data())
+    plan = get_plan_for_channel(getattr(channel, "id", 0))
+    schedule_file = plan.schedule_file if plan else None
+
+    ev = resolve_event(raw_event, get_schedule_data(schedule_file))
     text = (ev.get("text") or "").strip()
     files = [discord.File(fp) for fp in collect_files(ev.get("image"))]
 
@@ -101,65 +134,123 @@ async def _send_full_now(channel: discord.abc.Messageable, raw_event: dict):
 
 async def scheduler_loop(client: discord.Client):
     global _current_date_str, _sent_cache
+
     await client.wait_until_ready()
-    channels = await _ensure_channels(client)
-    load_schedule_if_changed(force=True)
-    log.info(
-        "[init] Ready. Posting to %s",
-        ", ".join(f"#{getattr(c, 'name', c.id)}" for c in channels),
-    )
+
+    # Resolve channels per plan
+    plans_with_channels = await _ensure_channels_per_plan(client)
+
+    # For other purposes we can use the union of all schedule channels
+    all_channels: list[discord.abc.Messageable] = [
+        ch for _, chs in plans_with_channels for ch in chs
+    ]
+
+    # Resolve a dedicated snapshot/datascraper channel, if configured
+    snapshot_channel: discord.abc.Messageable | None = None
+    if settings.D1_STATUS_CHANNEL_ID is not None:
+        cid = settings.D1_STATUS_CHANNEL_ID
+
+        # Try to reuse any existing resolved channel first
+        for ch in all_channels:
+            if getattr(ch, "id", None) == cid:
+                snapshot_channel = ch
+                break
+
+        # If not found yet, fetch it directly from Discord
+        if snapshot_channel is None:
+            ch = client.get_channel(cid)
+            if ch is None:
+                try:
+                    ch = await client.fetch_channel(cid)
+                except Exception as e:
+                    log.error("[init] Could not fetch D1 status channel %s: %s", cid, e)
+                    ch = None
+            snapshot_channel = ch
+
+    # Fallback: if no dedicated snapshot channel, use the first schedule channel (old behaviour)
+    if snapshot_channel is None and all_channels:
+        snapshot_channel = all_channels[0]
+
+    # Initial load & logging per plan
+    for plan, channels in plans_with_channels:
+        load_schedule_if_changed(force=True, schedule_file=plan.schedule_file)
+        log.info(
+            "[init] Ready for plan %s (%s). Posting to %s",
+            plan.name,
+            plan.schedule_file,
+            ", ".join(f"#{getattr(c, 'name', c.id)}" for c in channels),
+        )
 
     while not client.is_closed():
         try:
-            load_schedule_if_changed()
             now = datetime.now(TZ)
             today = now.date()
+
             if _current_date_str != today.isoformat():
                 async with _sent_cache_lock:
                     _sent_cache = set()
                 _current_date_str = today.isoformat()
                 log.info("[day] New day %s (Cycle %s)", today, cycle_day_for(today))
 
-            events = get_events_for_day(cycle_day_for(today))
-            for idx, ev in enumerate(events):
-                time_str = ev.get("time")
-                if not time_str:
-                    continue
-                try:
-                    hh, mm = map(int, time_str.split(":"))
-                except Exception:
-                    log.error("[loop] Bad time format in event: %r", time_str)
-                    continue
-                scheduled = datetime(
-                    today.year, today.month, today.day, hh, mm, tzinfo=TZ
-                )
-                if now >= scheduled and (now - scheduled) <= timedelta(
-                    minutes=settings.SEND_MISSED_WITHIN_MINUTES
-                ):
-                    for ch in channels:
-                        await _send_event(ch, scheduled, ev, idx)
+            daynum = cycle_day_for(today)
 
-            # Daily FoE → D1 snapshot at 04:00
-            await _run_daily_snapshot_if_due(channels, now)
+            # For each plan: load its file and send its events to its channels
+            for plan, channels in plans_with_channels:
+                if not channels:
+                    continue
+
+                load_schedule_if_changed(schedule_file=plan.schedule_file)
+
+                events = get_events_for_day(daynum, schedule_file=plan.schedule_file)
+                for idx, ev in enumerate(events):
+                    time_str = ev.get("time")
+                    if not time_str:
+                        continue
+                    try:
+                        hh, mm = map(int, time_str.split(":"))
+                    except Exception:
+                        log.error("[loop] Bad time format in event: %r", time_str)
+                        continue
+
+                    scheduled = datetime(
+                        today.year, today.month, today.day, hh, mm, tzinfo=TZ
+                    )
+                    if now >= scheduled and (now - scheduled) <= timedelta(
+                        minutes=settings.SEND_MISSED_WITHIN_MINUTES
+                    ):
+                        for ch in channels:
+                            await _send_event(
+                                ch,
+                                scheduled,
+                                ev,
+                                idx,
+                                schedule_file=plan.schedule_file,
+                            )
+
+            # Daily FoE → D1 snapshot at 04:00 (use dedicated status channel if available)
+            await _run_daily_snapshot_if_due(now, snapshot_channel)
 
             await asyncio.sleep(30)
         except Exception as e:
             log.exception("[loop] %s", e)
             await asyncio.sleep(5)
 
+async def _run_daily_snapshot_if_due(
+    now: datetime,
+    target_channel: discord.abc.Messageable | None,
+):
 
-async def _run_daily_snapshot_if_due(channels, now: datetime):
     """Fetch FoE data and push a daily snapshot into Cloudflare D1 at 04:00 local time."""
     # Compute today's 04:00 timestamp in TZ
-    scheduled = datetime(now.year, now.month, now.day, 4, 00, tzinfo=TZ)
+    scheduled = datetime(now.year, now.month, now.day, 4, 0, tzinfo=TZ)
     key = f"d1-snapshot|{scheduled.date()}|04:00"
 
     # Only run within the grace window and once per day
     if not (
-        now >= scheduled
-        and (now - scheduled) <= timedelta(
-            minutes=settings.SEND_MISSED_WITHIN_MINUTES
-        )
+            now >= scheduled
+            and (now - scheduled) <= timedelta(
+        minutes=settings.SEND_MISSED_WITHIN_MINUTES
+    )
     ):
         return
 
@@ -167,9 +258,6 @@ async def _run_daily_snapshot_if_due(channels, now: datetime):
         if key in _sent_cache:
             return
         _sent_cache.add(key)
-
-    # Use first allowed channel (if any) for status messages
-    target_channel = channels[0] if channels else None
 
     await _run_snapshot_impl(target_channel, source="daily")
 

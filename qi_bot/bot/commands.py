@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import discord
 
-from qi_bot.config import settings
+from qi_bot.config import settings, get_plan_for_channel
 from qi_bot.scheduler.loop import (
     start_scheduler,
     send_full_now,
@@ -16,7 +16,9 @@ from qi_bot.scheduler.loop import (
 from qi_bot.schedule.loader import (
     load_schedule_if_changed,
     get_events_for_day,
+    get_schedule_data,
 )
+
 
 log = logging.getLogger("qi-bot")
 
@@ -26,6 +28,20 @@ except ImportError:
     from backports.zoneinfo import ZoneInfo  # type: ignore
 
 TZ = ZoneInfo(settings.TIMEZONE)
+
+
+def _schedule_file_for_channel_id(channel_id: int) -> str:
+    """Return the schedule file to use for a given channel."""
+    plan = get_plan_for_channel(channel_id)
+    if plan:
+        return plan.schedule_file
+    # Fallback: default schedule
+    return settings.SCHEDULE_FILE
+
+
+def _schedule_file_for_message(message: discord.Message) -> str:
+    return _schedule_file_for_channel_id(message.channel.id)
+
 
 # --- Half-day helpers (DE only) ---
 
@@ -118,11 +134,11 @@ def _fmt_time_and_optional_title(ev, idx=None):
         return f"{prefix}{hhmm} Uhr:"
 
 
-def _find_now_and_next_for_today(now_dt):
+def _find_now_and_next_for_today(now_dt, schedule_file: str):
     """Return (latest_ev_or_None, next_ev_or_None, today_daynum) limited to *today only*."""
     today = now_dt.date()
     daynum = cycle_day_for_public(today)
-    events = get_events_for_day(daynum)
+    events = get_events_for_day(daynum, schedule_file=schedule_file)
     latest = None
     nxt = None
     for ev in events:
@@ -136,30 +152,29 @@ def _find_now_and_next_for_today(now_dt):
     return latest, nxt, daynum
 
 
-def _find_first_event_after_today(now_dt):
+def _find_first_event_after_today(now_dt, schedule_file: str):
     """Find the next day with events after today; scan up to one full cycle."""
     for step in range(1, settings.CYCLE_LENGTH + 1):
         dt = now_dt + timedelta(days=step)
         dnum = cycle_day_for_public(dt.date())
-        evs = get_events_for_day(dnum)
+        evs = get_events_for_day(dnum, schedule_file=schedule_file)
         if evs:
             return dnum, evs[0]
     return None, None
 
 
-def _find_most_recent_event_across_days(now_dt):
+def _find_most_recent_event_across_days(now_dt, schedule_file: str):
     """
     Find the most recent event at or before 'now', scanning backwards up to one full cycle.
-    Returns (event_or_None, daynum_or_None, event_datetime_or_None).
     """
     best_ev = None
-    best_dt = None
     best_daynum = None
+    best_dt = None
 
-    for days_back in range(0, settings.CYCLE_LENGTH):  # include today
-        dt_day = now_dt - timedelta(days=days_back)
+    for step in range(0, settings.CYCLE_LENGTH):
+        dt_day = now_dt - timedelta(days=step)
         dnum = cycle_day_for_public(dt_day.date())
-        evs = get_events_for_day(dnum)
+        evs = get_events_for_day(dnum, schedule_file=schedule_file)
         if not evs:
             continue
         for ev in evs:
@@ -174,6 +189,7 @@ def _find_most_recent_event_across_days(now_dt):
                 best_daynum = dnum
 
     return best_ev, best_daynum, best_dt
+
 
 # Define visible aliases per language and hidden ones here; the router builds maps from this.
 COMMAND_ALIASES = {
@@ -290,8 +306,9 @@ def register_handlers(client: discord.Client) -> None:
         cmd_key, lang, _is_hidden = entry
         raw = content
 
-        # Ensure we have the latest schedule
-        load_schedule_if_changed()
+        # Ensure we have the latest schedule for this channel's plan
+        schedule_file = _schedule_file_for_message(message)
+        load_schedule_if_changed(schedule_file=schedule_file)
 
         # Route to handlers, passing lang + used alias where useful
         if cmd_key == "help":
@@ -369,8 +386,9 @@ async def _handle_help(message: discord.Message, lang: str):
 
 async def _handle_today(message: discord.Message):
     now = datetime.now(TZ)
+    schedule_file = _schedule_file_for_message(message)
     daynum = cycle_day_for_public(now.date())
-    evs = get_events_for_day(daynum)
+    evs = get_events_for_day(daynum, schedule_file=schedule_file)
     if not evs:
         await message.channel.send(f"**Heute (Tag {daynum}):** keine Schritte geplant.")
         return
@@ -391,7 +409,8 @@ async def _handle_day(message: discord.Message, raw: str, lang: str, used_alias:
         await message.channel.send(_usage_day(lang))
         return
 
-    evs = get_events_for_day(d)
+    schedule_file = _schedule_file_for_message(message)
+    evs = get_events_for_day(d, schedule_file=schedule_file)
     if not evs:
         await message.channel.send(f"**Tag {d}:** keine Schritte geplant.")
         return
@@ -402,8 +421,11 @@ async def _handle_day(message: discord.Message, raw: str, lang: str, used_alias:
     await message.channel.send(f"**Tag {d}:**\n" + "\n".join(lines))
 
 async def _handle_all(message: discord.Message):
-    # We want all days with time + (optional) title
-    from qi_bot.schedule.loader import schedule_data as _sd  # local import to avoid cycles
+    from qi_bot.schedule.loader import get_schedule_data as _get_sd  # local import to avoid cycles
+
+    schedule_file = _schedule_file_for_message(message)
+    _sd = _get_sd(schedule_file)
+
     days_dict = _sd.get("days", {})
     if not days_dict:
         await message.channel.send("Keine Daten verfügbar.")
@@ -424,22 +446,23 @@ async def _handle_all(message: discord.Message):
 
 async def _handle_now(message: discord.Message):
     now = datetime.now(TZ)
+    schedule_file = _schedule_file_for_message(message)
 
     # NEW: search backwards across days (up to CYCLE_LENGTH) for the most recent event
-    most_recent, mr_daynum, mr_dt = _find_most_recent_event_across_days(now)
+    most_recent, mr_daynum, mr_dt = _find_most_recent_event_across_days(now, schedule_file)
 
     if most_recent:
         await send_full_now(message.channel, most_recent)
         return
 
     # Fallbacks if nothing found in the past window (unlikely if schedule is populated)
-    _, nxt, daynum = _find_now_and_next_for_today(now)
+    _, nxt, daynum = _find_now_and_next_for_today(now, schedule_file)
     if nxt:
         hhmm = nxt.get("time", "??:??")
         await message.channel.send(f"Heute noch nichts fällig. Nächster Schritt (Tag {daynum}): **{hhmm} Uhr**.")
         return
 
-    d2, first = _find_first_event_after_today(now)
+    d2, first = _find_first_event_after_today(now, schedule_file)
     if d2 and first:
         await message.channel.send(f"Heute keine Schritte. Nächster Tag mit Inhalt: **Tag {d2}**, {first.get('time','??:??')} Uhr.")
     else:
@@ -448,13 +471,15 @@ async def _handle_now(message: discord.Message):
 
 async def _handle_next(message: discord.Message):
     now = datetime.now(TZ)
-    _, nxt, daynum = _find_now_and_next_for_today(now)
+    schedule_file = _schedule_file_for_message(message)
+
+    _, nxt, daynum = _find_now_and_next_for_today(now, schedule_file)
     if nxt:
         # Send FULL message for the next (no title header)
         await send_full_now(message.channel, nxt)
         return
     # else: scan future days
-    d2, first = _find_first_event_after_today(now)
+    d2, first = _find_first_event_after_today(now, schedule_file)
     if d2 and first:
         await send_full_now(message.channel, first)
     else:
@@ -479,7 +504,9 @@ async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias
         return
 
     # Load full schedule and flatten all events across all days in order
-    from qi_bot.schedule.loader import schedule_data as _sd  # local import to avoid cycles
+    from qi_bot.schedule.loader import get_schedule_data as _get_sd  # local import to avoid cycles
+    schedule_file = _schedule_file_for_message(message)
+    _sd = _get_sd(schedule_file)
 
     all_events = []
     for d, evs, day_title in _all_days_iter(_sd):
@@ -529,7 +556,8 @@ async def _handle_half_day(message: discord.Message, lang: str, used_alias: str)
             )
         return
 
-    evs = get_events_for_day(daynum)
+    schedule_file = _schedule_file_for_message(message)
+    evs = get_events_for_day(daynum, schedule_file=schedule_file)
     if not evs:
         if lang == "de":
             await message.channel.send(f"**Tag {daynum}:** keine Schritte geplant.")
