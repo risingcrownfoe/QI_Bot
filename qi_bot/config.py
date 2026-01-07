@@ -60,7 +60,7 @@ DEFAULT_SCHEDULE_PLANS: tuple[SchedulePlan, ...] = (
     ),
     SchedulePlan(
         name="linnun",
-        schedule_file="messages_linnun.json",
+        schedule_file="messages_linnun_short.json",
         channel_ids=(
             1432327080749568000,
             1433087490587230349,  # linnun
