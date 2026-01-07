@@ -324,8 +324,8 @@ def _build_help_english() -> str:
         ("%today",      "gives all steps scheduled for today."),
         ("%day d",      "shows all steps for day d.\n"
                         "    e.g. `%day 1` shows all steps for **Thursday**, the first day of QI."),
-        ("%step d n",   "shows the n-th step for day d.\n"
-                        "    e.g. `%step 1 2` shows the second message of day 1."),
+        ("%step n",     "shows the n-th step across all days.\n"
+                        "    e.g. `%step 5` shows the fifth scheduled message overall."),
         ("%now",        "shows the most recent step (across days)."),
         ("%next",       "shows the next step."),
         ("%all",        "shows all scheduled steps for the entire QI."),
@@ -343,8 +343,8 @@ def _build_help_german() -> str:
         ("%heute",      "zeigt alle Schritte, die für heute geplant sind."),
         ("%tag t",      "zeigt alle Schritte für Tag t.\n"
                         "    z. B. `%tag 1` zeigt alle Schritte für **Donnerstag**, den ersten Tag der QI."),
-        ("%schritt t n","zeigt den n-ten Schritt für Tag t.\n"
-                        "    z. B. `%schritt 1 2` zeigt die zweite Nachricht vom ersten Tag."),
+        ("%schritt n",  "zeigt den n-ten Schritt über alle Tage hinweg.\n"
+                        "    z. B. `%schritt 5` zeigt die fünfte Nachricht insgesamt."),
         ("%jetzt",      "zeigt den zuletzt gesendeten Schritt (über alle Tage)."),
         ("%nächster",   "zeigt den nächsten geplanten Schritt."),
         ("%alle",       "zeigt alle geplanten Schritte für die gesamte QI."),
@@ -462,23 +462,52 @@ async def _handle_next(message: discord.Message):
 
 
 async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias: str):
+    # Expect exactly one numeric argument: the global step index n
     parts = raw.split()
-    if len(parts) != 3:
+    if len(parts) != 2:
         await message.channel.send(_usage_step(lang))
         return
+
     try:
-        d = int(parts[1]); n = int(parts[2])
+        n = int(parts[1])
     except ValueError:
         await message.channel.send(_usage_step(lang))
         return
-    evs = get_events_for_day(d)
-    if not evs:
-        await message.channel.send(f"**Tag {d}:** keine Schritte geplant.")
+
+    if n <= 0:
+        await message.channel.send(_usage_step(lang))
         return
-    if not (1 <= n <= len(evs)):
-        await message.channel.send(f"Tag {d} hat **{len(evs)}** Schritte. Index **{n}** ist ungültig.")
+
+    # Load full schedule and flatten all events across all days in order
+    from qi_bot.schedule.loader import schedule_data as _sd  # local import to avoid cycles
+
+    all_events = []
+    for d, evs, day_title in _all_days_iter(_sd):
+        for ev in evs:
+            all_events.append(ev)
+
+    if not all_events:
+        if lang == "de":
+            await message.channel.send("Keine Schritte geplant.")
+        else:
+            await message.channel.send("No steps scheduled.")
         return
-    await send_full_now(message.channel, evs[n - 1])
+
+    total = len(all_events)
+    if n > total:
+        if lang == "de":
+            await message.channel.send(
+                f"Es gibt insgesamt **{total}** Schritte. Index **{n}** ist ungültig."
+            )
+        else:
+            await message.channel.send(
+                f"There are **{total}** steps in total. Index **{n}** is out of range."
+            )
+        return
+
+    # n is 1-based index into the flattened list
+    ev = all_events[n - 1]
+    await send_full_now(message.channel, ev)
 
 async def _handle_half_day(message: discord.Message, lang: str, used_alias: str):
     """
@@ -581,11 +610,12 @@ def _usage_day(lang: str) -> str:
 def _usage_step(lang: str) -> str:
     if lang == "de":
         return (
-            "Benutzung: `%schritt t n`\n"
-            "    z. B. `%schritt 1 2` zeigt die zweite Nachricht vom ersten Tag."
+            "Benutzung: `%schritt n`\n"
+            "    z. B. `%schritt 5` zeigt die fünfte Nachricht über alle Tage hinweg."
         )
     else:
         return (
-            "Usage: `%step d n`\n"
-            "    e.g. `%step 1 2` shows the second message of day 1."
+            "Usage: `%step n`\n"
+            "    e.g. `%step 5` shows the fifth message across all days."
         )
+
