@@ -26,8 +26,9 @@ def _load_single_schedule(path: Path, force: bool = False) -> Dict[str, Any]:
 
         # Keep old global name in sync for the default file
         if path.name == settings.SCHEDULE_FILE:
-            global schedule_data
-            schedule_data = data
+            # mutate existing global dict instead of rebinding
+            schedule_data.clear()
+            schedule_data.update(data)
 
         return data
 
@@ -47,8 +48,9 @@ def _load_single_schedule(path: Path, force: bool = False) -> Dict[str, Any]:
 
     # Keep "schedule_data" for legacy callers (default file)
     if path.name == settings.SCHEDULE_FILE:
-        global schedule_data
-        schedule_data = data
+        # mutate existing global dict instead of rebinding
+        schedule_data.clear()
+        schedule_data.update(data)
 
     return data
 
