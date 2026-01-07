@@ -1,0 +1,30 @@
+{
+  "templates": {
+    /* Reusable reminders */
+    "reminder_build_complete": {
+      "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob die neuen Gebäude fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+    }
+  },
+  "days": {
+    "1": [ /* ---------- Day 1 (Donnerstag) ---------- */ ],
+    "2": [ /* ---------- Day 2 (Freitag)    ---------- */ ],
+    "3": [ /* ---------- Day 3 (Samstag)    ---------- */ ],
+    "4": [ /* ---------- Day 4 (Sonntag)    ---------- */ ],
+    "5": [ /* ---------- Day 5 (Montag)     ---------- */ ],
+    "6": [ /* ---------- Day 6 (Diesntag)   ---------- */ ],
+    "7": [ /* ---------- Day 7 (Mittwoch)   ---------- */ ],
+    "8": [ /* ---------- Day 8 (Donnerstag) ---------- */ ],
+    "9": [ /* ---------- Day 9 (Freitag)    ---------- */ ],
+    "10": [ /* ---------- Day 10 (Samstag)  ---------- */ ],
+    "11": [ /* ---------- Day 11 (Sonntag)  ---------- */ ],
+    "12": [ /* ---------- Day 12 (Montag)   ---------- */ ],
+    "13": [ /* ---------- Day 13 (Dienstag) ---------- */ ],
+    "14": [
+      {
+        "time": "12:00",
+        "title": "⏰ Reminder erhabene QI Gebäude",
+        "text": "**⏰ Reminder erhabene QI Gebäude setzen**\n\n🏗️ __Aktionen:__\n• Nach Bedarf **Truppen**\n• **+50 Güter**: für fortgeschrittene Taktik\n• **QI-Münzen / QI-Vorräte**: besonders prozentualle Boosts von Vorteil"
+      }
+    ]
+  }
+}

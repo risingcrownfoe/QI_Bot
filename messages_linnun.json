@@ -1,0 +1,226 @@
+{
+  "templates": {
+    /* Reusable reminders */
+    "reminder_build_complete": {
+      "text": "⏰ **Reminder!** QI-Siedlung öffnen & schauen, ob die neuen Gebäude fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+    }
+  },
+  "days": {
+    "1": [ /* ---------- Day 1 (Donnerstag) ---------- */
+      {
+        "time": "08:00",
+        "title": "🏗 Gebäude und 3 Erweiterungen platzieren",
+        "text": "**📬 Donnerstag Morgen (08 Uhr)**\n\n> ⚠️ **Achtung!** Erweiterungen müssen **längs** die Stadt erweitern (siehe Bild).\n> 💡 __Tipp:__ Wählt dafür **die Seite mit den _wenigsten Hindernissen_**.\n\n🏗️ __Aktionen:__\n• 3 Erweiterungen kaufen 🧩\n• **BAU:** 3× Mehrgeschossiges Haus\n• **BAU:** 7× Gutshaus\n• **BAU:** 5× Brauerei\n• **BAU:** 5× Gerberei\n• **BAU:** 7× Kirche",
+        "image": ["images/d01_1a.jpg","images/d01_1b.jpg"]
+      },
+      {
+        "time": "20:00",
+        "title": "Nur Ernten",
+        "text": "**📬 Donnerstag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁) \n • ⚠️ **ALLES ernten** \n\n Thats it. Wir brauchen mehr Reesourcen für die nächsten Schritte, deswegen ist das hier eine reine Ernte"
+      }
+    ],
+    "2": [ /* ---------- Day 2 (Freitag) ---------- */
+      { /* Kirche wird abgerissen, daher alles vorher ernten */
+        "time": "08:00",
+        "title": "🏗 Gütergebäude platzieren",
+        "text": "**📬 Freitag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁) \n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 1× Kirche\n• **BAU:** 1× Imkerei (*1 h warten* ⌛)",
+        "image": "images/d01_2.jpg"
+      },
+      {
+        "time": "09:00",
+        "title": "🏗 Gebäude und 1 Erweiterung platzieren",
+        "text": "**📬 Freitag Morgen (09 Uhr)**\n\n🏗️ __Aktionen__\n• 1× 12 Güter → 🧩 1 Erweiterung kaufen\n• **ABRISS:** 1× Imkerei\n• **BAU:** 2× Herrenhaus\n• **BAU:** 1× Kirche\n• **BAU:** 1× Galgen\n• **BAU:** 1× Alchemistenlabor (*1 h warten* ⌛)",
+        "image": "images/d01_3.jpg"
+      },
+      { /* Alchemistenlabor erst 1h später fertig */
+        "time": "10:00",
+        "title": "⏰ Reminder, Stadt nochmal öffnen",
+        "text": "⏰ **Reminder! (10 Uhr)** QI-Siedlung öffnen & schauen, ob **Alchemistenlabor** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+      },
+      { /* Alchemistenlabor evtl. noch nicht fertig – nicht schlimm */
+        "time": "20:00",
+        "title": "🏗 Gütergebäude platzieren",
+        "text": "**📬 Freitag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• Ernten was geht (Rest ernten wir 09:00)\n• **ABRISS:** 1× Gerberei\n• **BAU:** 1× Schießpulver-Manufaktur (*1 h warten* ⌛)",
+        "image": "images/d02_1.jpg"
+      },
+      {
+        "time": "21:00",
+        "title": "🏗 Gebäude und 1 Erweiterung platzieren",
+        "text": "**📬 Freitag Abend (21 Uhr)**\n\n🏗️ __Aktionen:__\n• 2× 20 Güter → 🧩 1 Erweiterung kaufen (**Längs zur vorherigen. Siehe Bild**)\n• **ABRISS:** 1× Schießpulver-Manufaktur\n• **BAU:** 2× Marktplatz\n• **BAU:** 1× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 1× Alchemistenlabor (*1 h warten* ⌛)",
+        "image": ["images/d02_2a.jpg","images/d02_2b.jpg"]
+      },
+      { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
+        "time": "22:00",
+        "title": "⏰ Reminder, Stadt nochmal öffnen",
+        "text": "⏰ **Reminder! (22 Uhr)** QI-Siedlung öffnen & schauen, ob **Fachwerkhaus** und **Alchemistenlabor** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+      }
+    ],
+    "3": [ /* ---------- Day 3 (Samstag) ---------- */
+      {
+        "time": "08:00",
+        "title": "🏗 Gütergebäude platzieren",
+        "text": "**📬 Samstag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠️ **ALLES ernten** (auch Fachwerkhaus/Alchemistenlabor)\n• **ABRISS:** 1× Marktplatz\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "image": "images/d02_3.jpg"
+      },
+      {
+        "time": "09:00",
+        "title": "🏗 Gebäude und 1 Erweiterung platzieren",
+        "text": "**📬 Samstag Morgen (09 Uhr)**\n\n🏗️ __Aktionen:__\n• 4× 20 Güter → 🧩 1 Erweiterung kaufen (Platzierung egal)\n• **ABRISS:** 1× Seilerei\n• **BAU:** 2× Galgen\n• **BAU:** 1× Mehrgeschossiges Haus\n• **BAU:** 1× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 1× Alchemistenlabor (*1 h warten* ⌛)",
+        "image": "images/d02_4.jpg"
+      },
+      { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
+        "time": "10:00",
+        "title": "⏰ Reminder, Stadt nochmal öffnen",
+        "text": "⏰ **Reminder! (09 Uhr)** QI-Siedlung öffnen & schauen, ob **Fachwerkhaus** und **Alchemistenlabor** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+      },
+      {
+        "time": "20:00",
+        "title": "Nur Ernten",
+        "text": "**📬 Samstag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁) \n • ⚠️ **ALLES ernten** \n\n Thats it. Wir brauchen mehr Reesourcen für die nächsten Schritte, deswegen ist das hier eine reine Ernte"
+      }
+    ],
+    "4": [ /* ---------- Day 4 (Sonntag) ---------- */
+      {
+        "time": "08:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Sonntag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• Ernten was geht (Rest ernten wir 09:00)\n• **ABRISS:** 3× Gerberei\n• **BAU:** 1× Katapult-Camp\n• 3× 10 Einheiten rekrutieren\n• **ABRISS:** 1× Katapult-Camp\n• **BAU:** 5× Alchemistenlabor (*1 h warten* ⌛)",
+        "image": ["images/d03_1.jpg", "images/d03_2.jpg"]
+      },
+      { /* Alchemistenlabore erst 1h später fertig */
+        "time": "09:00",
+        "title": "⏰ Reminder, Stadt nochmal öffnen",
+        "text": "⏰ **Reminder! (09 Uhr)** QI-Siedlung öffnen & schauen, ob **Alchemistenlabore** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+      },
+      {
+        "time": "20:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Sonntag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 1× Marktplatz\n• **ABRISS:** 1× Kirche\n• **ABRISS:** 1× Gerberei\n• **BAU:** 1× Pranger\n• **BAU:** 2× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 2× Alchemistenlabor (*1 h warten* ⌛)",
+        "image": "images/d03_3.jpg"
+      },
+      { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
+        "time": "21:00",
+        "title": "⏰ Reminder, Stadt nochmal öffnen",
+        "text": "⏰ **Reminder! (21 Uhr)** QI-Siedlung öffnen & schauen, ob **Fachwerkhäuser** und **Alchemistenlabore** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+      }
+    ],
+    "5": [ /* ---------- Day 5 (Montag) ---------- */
+      {
+        "time": "08:00",
+        "title": "🏗 Gütergebäude platzieren",
+        "text": "**📬 Montag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠\uFE0F **ALLES ernten**\n• **ABRISS:** 2× Kirche\n• **ABRISS:** 1× Brauerei\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "image": "images/d04_1.jpg"
+      },
+      {
+        "time": "09:00",
+        "title": "🏗 Gebäude und 1 Erweiterung platzieren",
+        "text": "**📬 Montag Morgen (09 Uhr)**\n\n🏗️ __Aktionen:__\n• 6× 20 Güter → 🧩 1 Erweiterung kaufen\n• **ABRISS:** 1× Seilerei\n• **ABRISS:** 2× Herrenhaus\n• **BAU:** 3× Gutshaus\n• **BAU:** 1× Pranger\n• **BAU:** 2× Fachwerkhaus (*1 h warten* ⌛)\n• **BAU:** 5× Alchemistenlabor (*1 h warten* ⌛)",
+        "image": "images/d04_2.jpg"
+      },
+      { /* Fachwerkhaus & Alchemistenlabor erst 1h später fertig */
+        "time": "10:00",
+        "title": "⏰ Reminder, Stadt nochmal öffnen",
+        "text": "⏰ **Reminder! (10 Uhr)** QI-Siedlung öffnen & schauen, ob **Fachwerkhäuser** und **Alchemistenlabore** fertig sind. Sonst starten sie nicht mit der Produktion. ✅"
+      },
+      {
+        "time": "20:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Montag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• ⚠️ **ALLES ernten** (auch Fachwerkhaus/Alchemistenlabor)\n• **ABRISS:** 3× Kirche\n• **ABRISS:** 1× Mehrgeschossiges Haus\n• **BAU:** 1× Bliden-Camp (*1 h warten* ⌛)",
+        "image": "images/d04_3.jpg"
+      },
+      {
+        "time": "21:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Montag Abend (21 Uhr)**\n\n🏗️ __Aktionen:__\n• 3× 10 Einheiten rekrutieren\n• **ABRISS:** 1× Bliden-Camp\n• **BAU:** 1× Pranger\n• **BAU:** 1× Schindelhaus **(beschleunigen)**\n• **BAU:** 1× Bäckerei **(beschleunigen)**\n• **BAU:** 1× Brauerei",
+        "image": "images/d04_4.jpg"
+      }
+    ],
+
+    "6": [ /* ---------- Day 6 (Diesntag) ---------- */
+      {
+        "time": "08:00",
+        "title": "🏗 Gütergebäude platzieren",
+        "text": "**📬 Diesntag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 1× Brauerei\n• **ABRISS:** 1× Kirche\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "image": "images/d05_1.jpg"
+      },
+      { /* Hinweis: wer keine % braucht, kann statt der 5 Dekos 2 zusätzliche Pranger bauen (noch testen) */
+        "time": "09:00",
+        "title": "🏗 Gebäude und 1 Erweiterung platzieren",
+        "text": "**📬 Diesntag Morgen (09 Uhr)**\n\n🏗️ __Aktionen:__\n• 9× 20 Güter → 🧩 1 Erweiterung kaufen\n• **ABRISS:** 1× Seilerei\n• **BAU:** 1× Pranger\n• **BAU:** 1× Schindelhaus\n• **BAU:** 1× Bäckerei\n• **BAU:** 2× Gutshaus\n• **BAU:** 5× Wegweiser 🔴 **oder** Wasserspeier 🔵",
+        "image": "images/d05_2.jpg"
+      },
+      {
+        "time": "20:00",
+        "title": "🏗 Gütergebäude platzieren",
+        "text": "**📬 Montag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 2× Mehrgeschossiges Haus\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "image": "images/d05_3.jpg"
+      },
+      {
+        "time": "21:00",
+        "title": "🏗 Gebäude und 1 Erweiterung platzieren",
+        "text": "**📬 Diesntag Abend (21 Uhr)**\n\n🏗️ __Aktionen:__\n• 12× 20 Güter → 🧩 1 Erweiterung kaufen\n• **ABRISS:** 1× Seilerei\n• **BAU:** 1× Schindelhaus\n• **BAU:** 1× Bäckerei\n• **BAU:** 1× Gutshaus\n• **BAU:** 1× Pranger\n• **BAU:** 1× Wegweiser 🔴 **oder** Wasserspeier 🔵",
+        "image": "images/d05_4.jpg"
+      }
+    ],
+
+    "7": [ /* ---------- Day 7 (Mittwoch) ---------- */
+      {
+        "time": "08:00",
+        "title": "🏗 Gütergebäude platzieren",
+        "text": "**📬 Mittwoch Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 1× Mehrgeschossiges Haus\n• **ABRISS:** 1× Gutshaus\n• **BAU:** 1× Seilerei (*1 h warten* ⌛)",
+        "image": "images/d06_1.jpg"
+      },
+      {
+        "time": "09:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Mittwoch Morgen (09 Uhr)**\n\n🏗️ __Aktionen:__\n• 16× 20 Güter → 🧩 1 Erweiterung kaufen\n• **ABRISS:** 1× Seilerei\n• **BAU:** 3× Schindelhaus\n• **BAU:** 1× Wegweiser 🔴 **oder** Wasserspeier 🔵\n• **BAU:** 1× Bliden-Camp\n• 5× 10 Einheiten rekrutieren",
+        "image": "images/d06_2.jpg"
+      },
+      { /* Erinnerung: Training */
+        "time": "10:00",
+        "title": "⏰ Erinnerung: Truppen ausbilden",
+        "text": "⏰ **Reminder!** Truppen ausbilden"
+      },
+      {
+        "time": "20:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Mittwoch Abend (20 Uhr)**\n\n> 💡 __Hinweis:__ Ab hier ist der Aufbau im Prinzip fertig. Wer mehr **Quantenaktionen** will, baut fortan **Pranger**. Wer mehr **Kampf%** benötigt, baut mehr **Deko**. Der Plan schlägt ab hier einen **mittleren Weg** vor.\n\n🏗️ __Aktionen:__\n• **ABRISS:** 12× Gutshaus\n• **BAU:** 8× Pranger\n• **BAU:** 8× Wegweiser 🔴 **oder** Wasserspeier 🔵",
+        "image": "images/d06_3.jpg"
+      }
+    ],
+
+    "8": [ /* ---------- Day 8 (Donnerstag) ---------- */
+      {
+        "time": "08:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Donnerstag Morgen (08 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 3× Galgen\n• **BAU:** 3× Pranger\n• **BAU:** 9× Wegweiser 🔴 **oder** Wasserspeier 🔵",
+        "image": "images/d07_1.jpg"
+      },
+      {
+        "time": "20:00",
+        "title": "🏗 Gebäude platzieren",
+        "text": "**📬 Donnerstag Abend (20 Uhr)**\n\n🏗️ __Aktionen:__\n• Euphorie checken (**150%** 😁)\n• **ABRISS:** 4× Brauerei\n• **ABRISS:** 1× Fachwerkhaus\n• **ABRISS:** 1× Bliden-Camp\n• **BAU:** 1× Kanonen-Camp\n• **BAU:** 8× Pranger\n• **BAU:** 8× Wegweiser 🔴 **oder** Wasserspeier 🔵",
+        "image": "images/d07_2.jpg"
+      }
+    ],
+
+    "9": [ /* ---------- Day 9 (Freitag) ---------- */
+      {
+        "time": "08:00",
+        "title": "🧭 Weiteres Vorgehen",
+        "text": "**📬 Weiteres Vorgehen**\n\n🏗️ __Aktionen:__\n• Nach Bedarf **Kanonen rekrutieren**\n• Für **Quantenaktionen**: **Pranger** bauen\n• Für **Kampf%**: **Wegweiser 🔴** oder **Wasserspeier 🔵** bauen\n• Für Platz: Gebäude abreißen – beginnend mit **Alchemistenlaboren**"
+      }
+    ],
+
+    "10": [ /* ---------- Day 10 (Samstag) ---------- */ ],
+    "11": [ /* ---------- Day 11 (Sonntag) ---------- */ ],
+    "12": [ /* ---------- Day 12 (Montag) ---------- */ ],
+    "13": [ /* ---------- Day 13 (Dienstag) ---------- */ ],
+    "14": [
+      {
+        "time": "12:00",
+        "title": "⏰ Reminder erhabene QI Gebäude",
+        "text": "**⏰ Reminder erhabene QI Gebäude setzen**\n\n🏗️ __Aktionen:__\n• Nach Bedarf **Truppen**\n• **+50 Güter**: für fortgeschrittene Taktik\n• **QI-Münzen / QI-Vorräte**: besonders prozentualle Boosts von Vorteil"
+      }
+    ]
+  }
+}
