@@ -54,16 +54,16 @@ DEFAULT_SCHEDULE_PLANS: tuple[SchedulePlan, ...] = (
         name="alch",
         schedule_file="messages_alch.json",
         channel_ids=(
-            1432327080749568000,
-            1453801024727814275,  # alchemist
+            1459513547867295918,    # single DC
+            1453801024727814275,    # RC
         ),
     ),
     SchedulePlan(
         name="linnun",
         schedule_file="messages_linnun_short.json",
         channel_ids=(
-            1432327080749568000,
-            1433087490587230349,  # linnun
+            1432327080749568000,    # single DC
+            1433087490587230349,    # RC
         ),
     ),
 )
@@ -96,7 +96,7 @@ settings = Settings(
     ALLOWED_CHANNEL_IDS=DEFAULT_ALLOWED_CHANNEL_IDS,
     PORT=10000,
     SCHEDULE_PLANS=DEFAULT_SCHEDULE_PLANS,
-    D1_STATUS_CHANNEL_ID=1432327080749568000,
+    D1_STATUS_CHANNEL_ID=1459513631271031028,
 )
 
 # Quick lookup: channel_id → plan
