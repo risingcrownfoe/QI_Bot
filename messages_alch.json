@@ -96,9 +96,21 @@
         "title": "Schritt 13",
         "text": "",
         "image": ["images_alch/S13.jpg"]
+      },
+      {
+        "time": "16:00",
+        "title": "Schritt 14",
+        "text": "",
+        "image": ["images_alch/S14.jpg"]
       }
     ],
     "8": [ /* ---------- Day 8 (Donnerstag) ---------- */ ],
+    {
+        "time": "06:00",
+        "title": "Schritt 15",
+        "text": "",
+        "image": ["images_alch/S15.jpg"]
+      }
     "9": [ /* ---------- Day 9 (Freitag)    ---------- */ ],
     "10": [ /* ---------- Day 10 (Samstag)  ---------- */ ],
     "11": [ /* ---------- Day 11 (Sonntag)  ---------- */ ],
