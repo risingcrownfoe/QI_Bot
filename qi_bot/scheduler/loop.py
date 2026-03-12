@@ -48,7 +48,12 @@ async def _ensure_channels_per_plan(client: discord.Client):
                 try:
                     ch = await client.fetch_channel(cid)
                 except Exception as e:
-                    log.error("[init] Could not fetch channel %s for plan %s: %s", cid, plan.name, e)
+                    log.error(
+                        "[init] Could not fetch channel %s for plan %s: %s",
+                        cid,
+                        plan.name,
+                        e,
+                    )
                     continue
             plan_channels.append(ch)
 
@@ -69,7 +74,7 @@ async def _send_event(
     when_dt: datetime,
     raw_event: dict,
     idx: int,
-    schedule_file: str | None = None
+    schedule_file: str | None = None,
 ):
     # If schedule_file not given (e.g. called from preview), infer from channel
     if schedule_file is None:
@@ -108,7 +113,9 @@ async def _send_preview(channel: discord.abc.Messageable, for_date: date):
         await channel.send(f"**Tag {daynum}**: keine Schritte geplant.")
         return
 
-    header = f"**Tag {daynum} ({for_date.isoformat()}):** {len(events)} Schritte geplant.\n"
+    header = (
+        f"**Tag {daynum} ({for_date.isoformat()}):** {len(events)} Schritte geplant.\n"
+    )
     await channel.send(header)
 
     for idx, ev in enumerate(events):
@@ -235,11 +242,11 @@ async def scheduler_loop(client: discord.Client):
             log.exception("[loop] %s", e)
             await asyncio.sleep(5)
 
+
 async def _run_daily_snapshot_if_due(
     now: datetime,
     target_channel: discord.abc.Messageable | None,
 ):
-
     """Fetch FoE data and push a daily snapshot into Cloudflare D1 at 04:00 local time."""
     # Compute today's 04:00 timestamp in TZ
     scheduled = datetime(now.year, now.month, now.day, 4, 0, tzinfo=TZ)
@@ -247,10 +254,8 @@ async def _run_daily_snapshot_if_due(
 
     # Only run within the grace window and once per day
     if not (
-            now >= scheduled
-            and (now - scheduled) <= timedelta(
-        minutes=settings.SEND_MISSED_WITHIN_MINUTES
-    )
+        now >= scheduled
+        and (now - scheduled) <= timedelta(minutes=settings.SEND_MISSED_WITHIN_MINUTES)
     ):
         return
 
@@ -286,7 +291,11 @@ async def _run_snapshot_impl(
             label = result.get("label")
             count = result.get("rows_inserted")
             snapshot_id = result.get("snapshot_id")
-            prefix = "✅ Daily FoE snapshot" if source == "daily" else "✅ Manual FoE snapshot"
+            prefix = (
+                "✅ Daily FoE snapshot"
+                if source == "daily"
+                else "✅ Manual FoE snapshot"
+            )
             await target_channel.send(
                 f"{prefix} stored in D1:\n"
                 f"- Label: **{label}**\n"
@@ -322,9 +331,74 @@ async def _run_snapshot_impl(
                 log.error("[d1] Could not send error message to Discord: %s", send_err)
 
 
+async def _run_snapshot_from_rows_impl(
+    target_channel: discord.abc.Messageable | None,
+    rows: list[dict],
+    source: str = "manual-file",
+):
+    """Core logic to insert a snapshot into D1 from already loaded raw rows.
+
+    Used by the manual `%sqlfile` command.
+    """
+    try:
+        from qi_bot.utils.forge_scrape import build_daily_rows
+        from qi_bot.utils.cloudfare_d1 import insert_daily_snapshot
+
+        filtered_rows = await asyncio.to_thread(
+            build_daily_rows, rows, 10_000, 5_000_000
+        )
+
+        result = await asyncio.to_thread(insert_daily_snapshot, filtered_rows)
+
+        if target_channel:
+            label = result.get("label")
+            count = result.get("rows_inserted")
+            snapshot_id = result.get("snapshot_id")
+
+            await target_channel.send(
+                f"✅ Manual FoE file snapshot stored in D1:\n"
+                f"- Label: **{label}**\n"
+                f"- Rows: **{count}**\n"
+                f"- Snapshot ID: `{snapshot_id}`"
+            )
+
+        log.info(
+            "[d1] ✅ Snapshot (%s) %s stored with %s rows",
+            source,
+            result.get("snapshot_id"),
+            result.get("rows_inserted"),
+        )
+
+    except Exception as e:
+        log.exception("[d1] ❌ %s snapshot failed: %s", source, e)
+
+        if target_channel:
+            err_type = type(e).__name__
+            err_msg = str(e)
+            combined = f"{err_type}: {err_msg}"
+            combined = combined if len(combined) <= 1500 else combined[:1497] + "..."
+
+            try:
+                await target_channel.send(
+                    f"❌ Manual FoE file snapshot **FAILED**.\n"
+                    f"Error: `{combined}`\n"
+                    "Check Render logs for full stack trace."
+                )
+            except Exception as send_err:
+                log.error("[d1] Could not send error message to Discord: %s", send_err)
+
+
 async def run_manual_snapshot(target_channel: discord.abc.Messageable):
     """Public helper: run a manual FoE → D1 snapshot now, reporting to the given channel."""
     await _run_snapshot_impl(target_channel, source="manual")
+
+
+async def run_manual_snapshot_from_rows(
+    target_channel: discord.abc.Messageable,
+    rows: list[dict],
+):
+    """Public helper: run a manual FoE file → D1 snapshot now."""
+    await _run_snapshot_from_rows_impl(target_channel, rows, source="manual-file")
 
 
 def start_scheduler(client: discord.Client):
@@ -341,3 +415,4 @@ send_full_now = _send_full_now
 cycle_day_for_public = cycle_day_for
 # new export for commands
 run_manual_snapshot_public = run_manual_snapshot
+run_manual_snapshot_from_rows_public = run_manual_snapshot_from_rows

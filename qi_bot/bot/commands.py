@@ -11,6 +11,7 @@ from qi_bot.scheduler.loop import (
     send_full_now,
     cycle_day_for_public,
     run_manual_snapshot_public,
+    run_manual_snapshot_from_rows_public,
 )
 
 from qi_bot.schedule.loader import (
@@ -66,7 +67,7 @@ DAYNUM_TO_NAME_DE = {
     7: "Mittwoch",
 }
 
-HALF_TOKENS_MORNING = ("früh", "frueh", "morgen")   # with / without umlaut
+HALF_TOKENS_MORNING = ("früh", "frueh", "morgen")  # with / without umlaut
 HALF_TOKENS_EVENING = ("spät", "spaet", "abend")
 
 
@@ -84,8 +85,8 @@ def _parse_halfday_from_alias(used_alias: str):
     if len(alias) < 3:
         return None, None
 
-    day_code = alias[:2]       # 'do', 'fr', 'sa', ...
-    half_token = alias[2:]     # 'früh', 'frueh', 'spät', 'spaet', ...
+    day_code = alias[:2]  # 'do', 'fr', 'sa', ...
+    half_token = alias[2:]  # 'früh', 'frueh', 'spät', 'spaet', ...
 
     daynum = DAYCODE_TO_DAYNUM.get(day_code)
     if daynum is None:
@@ -193,66 +194,53 @@ def _find_most_recent_event_across_days(now_dt, schedule_file: str):
 
 # Define visible aliases per language and hidden ones here; the router builds maps from this.
 COMMAND_ALIASES = {
-    "help": {
-        "en": ["%help"],
-        "de": ["%hilfe"],
-        "hidden": []
-    },
-    "today": {
-        "en": ["%today"],
-        "de": ["%heute"],
-        "hidden": []
-    },
-    "day": {
-        "en": ["%day"],
-        "de": ["%tag"],
-        "hidden": ["%d"]
-    },
-    "all": {
-        "en": ["%all"],
-        "de": ["%alle"],
-        "hidden": []
-    },
-    "now": {
-        "en": ["%now"],
-        "de": ["%jetzt"],
-        "hidden": []
-    },
+    "help": {"en": ["%help"], "de": ["%hilfe"], "hidden": []},
+    "today": {"en": ["%today"], "de": ["%heute"], "hidden": []},
+    "day": {"en": ["%day"], "de": ["%tag"], "hidden": ["%d"]},
+    "all": {"en": ["%all"], "de": ["%alle"], "hidden": []},
+    "now": {"en": ["%now"], "de": ["%jetzt"], "hidden": []},
     "next": {
         "en": ["%next"],
         "de": ["%nächster"],
-        "hidden": ["%naechster", "%n"]  # accepted, not shown in help
+        "hidden": ["%naechster", "%n"],  # accepted, not shown in help
     },
-    "step": {
-        "en": ["%step"],
-        "de": ["%schritt"],
-        "hidden": ["%s"]
-    },
-    "sql": {
-        "en": ["%sql"],
-        "de": ["%sql"],
-        "hidden": []
-    },
+    "step": {"en": ["%step"], "de": ["%schritt"], "hidden": ["%s"]},
+    "sql": {"en": ["%sql"], "de": ["%sql"], "hidden": []},
+    "sqlfile": {"en": ["%sqlfile"], "de": ["%sqlfile"], "hidden": []},
     "halfday": {
         "en": [],  # no EN commands for now
         "de": [
-            "%dofrüh", "%dospät",
-            "%frfrüh", "%frspät",
-            "%safrüh", "%saspät",
-            "%sofrüh", "%sospät",
-            "%mofrüh", "%mospät",
-            "%difrüh", "%dispät",
-            "%mifrüh", "%mispät",
+            "%dofrüh",
+            "%dospät",
+            "%frfrüh",
+            "%frspät",
+            "%safrüh",
+            "%saspät",
+            "%sofrüh",
+            "%sospät",
+            "%mofrüh",
+            "%mospät",
+            "%difrüh",
+            "%dispät",
+            "%mifrüh",
+            "%mispät",
         ],
         # ASCII fallbacks without umlauts (hidden in help)
         "hidden": [
-            "%dofrueh", "%dospaet",
-            "%frfrueh", "%frspaet",
-            "%safrueh", "%saspaet",
-            "%sofrueh", "%sospaet",
-            "%mofrueh", "%mospaet",
-            "%difrueh", "%dispaet",
-            "%mifrueh", "%mispaet",
+            "%dofrueh",
+            "%dospaet",
+            "%frfrueh",
+            "%frspaet",
+            "%safrueh",
+            "%saspaet",
+            "%sofrueh",
+            "%sospaet",
+            "%mofrueh",
+            "%mospaet",
+            "%difrueh",
+            "%dispaet",
+            "%mifrueh",
+            "%mispaet",
         ],
     },
 }
@@ -270,6 +258,7 @@ for key, spec in COMMAND_ALIASES.items():
 
 
 # -------- Register handlers --------
+
 
 def register_handlers(client: discord.Client) -> None:
     @client.event
@@ -327,27 +316,36 @@ def register_handlers(client: discord.Client) -> None:
             await _handle_step(message, raw, lang, trigger)
         elif cmd_key == "sql":
             await _handle_sql(message)
+        elif cmd_key == "sqlfile":
+            await _handle_sqlfile(message)
         elif cmd_key == "halfday":
             await _handle_half_day(message, lang, trigger)
 
 
 # -------- Help builders (English/German menus split) --------
 
+
 def _build_help_english() -> str:
     """
     English-only commands for easy copy in Discord (shown as inline code spans).
     """
     rows = [
-        ("%today",      "gives all steps scheduled for today."),
-        ("%day d",      "shows all steps for day d.\n"
-                        "    e.g. `%day 1` shows all steps for **Thursday**, the first day of QI."),
-        ("%step n",     "shows the n-th step across all days.\n"
-                        "    e.g. `%step 5` shows the fifth scheduled message overall."),
-        ("%now",        "shows the most recent step (across days)."),
-        ("%next",       "shows the next step."),
-        ("%all",        "shows all scheduled steps for the entire QI."),
-        ("%help",       "shows this menu in English."),
-        ("%hilfe",      "zeigt das Hilfemenü auf Deutsch."),
+        ("%today", "gives all steps scheduled for today."),
+        (
+            "%day d",
+            "shows all steps for day d.\n"
+            "    e.g. `%day 1` shows all steps for **Thursday**, the first day of QI.",
+        ),
+        (
+            "%step n",
+            "shows the n-th step across all days.\n"
+            "    e.g. `%step 5` shows the fifth scheduled message overall.",
+        ),
+        ("%now", "shows the most recent step (across days)."),
+        ("%next", "shows the next step."),
+        ("%all", "shows all scheduled steps for the entire QI."),
+        ("%help", "shows this menu in English."),
+        ("%hilfe", "zeigt das Hilfemenü auf Deutsch."),
     ]
     lines = ["**Available commands (English):**"]
     for cmd, desc in rows:
@@ -357,16 +355,22 @@ def _build_help_english() -> str:
 
 def _build_help_german() -> str:
     rows = [
-        ("%heute",      "zeigt alle Schritte, die für heute geplant sind."),
-        ("%tag t",      "zeigt alle Schritte für Tag t.\n"
-                        "    z. B. `%tag 1` zeigt alle Schritte für **Donnerstag**, den ersten Tag der QI."),
-        ("%schritt n",  "zeigt den n-ten Schritt über alle Tage hinweg.\n"
-                        "    z. B. `%schritt 5` zeigt die fünfte Nachricht insgesamt."),
-        ("%jetzt",      "zeigt den zuletzt gesendeten Schritt (über alle Tage)."),
-        ("%nächster",   "zeigt den nächsten geplanten Schritt."),
-        ("%alle",       "zeigt alle geplanten Schritte für die gesamte QI."),
-        ("%help",       "shows the help menu in English."),
-        ("%hilfe",      "zeigt dieses Hilfemenü auf Deutsch."),
+        ("%heute", "zeigt alle Schritte, die für heute geplant sind."),
+        (
+            "%tag t",
+            "zeigt alle Schritte für Tag t.\n"
+            "    z. B. `%tag 1` zeigt alle Schritte für **Donnerstag**, den ersten Tag der QI.",
+        ),
+        (
+            "%schritt n",
+            "zeigt den n-ten Schritt über alle Tage hinweg.\n"
+            "    z. B. `%schritt 5` zeigt die fünfte Nachricht insgesamt.",
+        ),
+        ("%jetzt", "zeigt den zuletzt gesendeten Schritt (über alle Tage)."),
+        ("%nächster", "zeigt den nächsten geplanten Schritt."),
+        ("%alle", "zeigt alle geplanten Schritte für die gesamte QI."),
+        ("%help", "shows the help menu in English."),
+        ("%hilfe", "zeigt dieses Hilfemenü auf Deutsch."),
     ]
     lines = ["**Verfügbare Befehle (Deutsch):**"]
     for cmd, desc in rows:
@@ -375,6 +379,7 @@ def _build_help_german() -> str:
 
 
 # -------- Command handlers --------
+
 
 async def _handle_help(message: discord.Message, lang: str):
     if lang == "de":
@@ -398,6 +403,7 @@ async def _handle_today(message: discord.Message):
         lines.append(_fmt_time_and_optional_title(ev, idx=i))
     await message.channel.send(f"**Heute (Tag {daynum}):**\n" + "\n".join(lines))
 
+
 async def _handle_day(message: discord.Message, raw: str, lang: str, used_alias: str):
     parts = raw.split()
     if len(parts) != 2:
@@ -420,8 +426,11 @@ async def _handle_day(message: discord.Message, raw: str, lang: str, used_alias:
         lines.append(_fmt_time_and_optional_title(ev, idx=i))
     await message.channel.send(f"**Tag {d}:**\n" + "\n".join(lines))
 
+
 async def _handle_all(message: discord.Message):
-    from qi_bot.schedule.loader import get_schedule_data as _get_sd  # local import to avoid cycles
+    from qi_bot.schedule.loader import (
+        get_schedule_data as _get_sd,
+    )  # local import to avoid cycles
 
     schedule_file = _schedule_file_for_message(message)
     _sd = _get_sd(schedule_file)
@@ -439,9 +448,9 @@ async def _handle_all(message: discord.Message):
         lines = [_fmt_time_and_optional_title(ev) for ev in evs]
         chunks.append(header + "\n" + "\n".join(lines))
 
-    await message.channel.send("\n\n".join(chunks) if chunks else "Keine Daten verfügbar.")
-
-
+    await message.channel.send(
+        "\n\n".join(chunks) if chunks else "Keine Daten verfügbar."
+    )
 
 
 async def _handle_now(message: discord.Message):
@@ -449,7 +458,9 @@ async def _handle_now(message: discord.Message):
     schedule_file = _schedule_file_for_message(message)
 
     # NEW: search backwards across days (up to CYCLE_LENGTH) for the most recent event
-    most_recent, mr_daynum, mr_dt = _find_most_recent_event_across_days(now, schedule_file)
+    most_recent, mr_daynum, mr_dt = _find_most_recent_event_across_days(
+        now, schedule_file
+    )
 
     if most_recent:
         await send_full_now(message.channel, most_recent)
@@ -459,12 +470,16 @@ async def _handle_now(message: discord.Message):
     _, nxt, daynum = _find_now_and_next_for_today(now, schedule_file)
     if nxt:
         hhmm = nxt.get("time", "??:??")
-        await message.channel.send(f"Heute noch nichts fällig. Nächster Schritt (Tag {daynum}): **{hhmm} Uhr**.")
+        await message.channel.send(
+            f"Heute noch nichts fällig. Nächster Schritt (Tag {daynum}): **{hhmm} Uhr**."
+        )
         return
 
     d2, first = _find_first_event_after_today(now, schedule_file)
     if d2 and first:
-        await message.channel.send(f"Heute keine Schritte. Nächster Tag mit Inhalt: **Tag {d2}**, {first.get('time','??:??')} Uhr.")
+        await message.channel.send(
+            f"Heute keine Schritte. Nächster Tag mit Inhalt: **Tag {d2}**, {first.get('time','??:??')} Uhr."
+        )
     else:
         await message.channel.send("Keine weiteren Schritte gefunden.")
 
@@ -504,7 +519,10 @@ async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias
         return
 
     # Load full schedule and flatten all events across all days in order
-    from qi_bot.schedule.loader import get_schedule_data as _get_sd  # local import to avoid cycles
+    from qi_bot.schedule.loader import (
+        get_schedule_data as _get_sd,
+    )  # local import to avoid cycles
+
     schedule_file = _schedule_file_for_message(message)
     _sd = _get_sd(schedule_file)
 
@@ -536,6 +554,7 @@ async def _handle_step(message: discord.Message, raw: str, lang: str, used_alias
     ev = all_events[n - 1]
     await send_full_now(message.channel, ev)
 
+
 async def _handle_half_day(message: discord.Message, lang: str, used_alias: str):
     """
     Handle commands like %dofrüh, %dospät, %frfrüh, %frspät, ...
@@ -551,9 +570,7 @@ async def _handle_half_day(message: discord.Message, lang: str, used_alias: str)
                 "Beispiele: `%dofrüh`, `%dospät`, `%frfrüh`, `%frspät`."
             )
         else:
-            await message.channel.send(
-                "Could not parse day / half-day from command."
-            )
+            await message.channel.send("Could not parse day / half-day from command.")
         return
 
     schedule_file = _schedule_file_for_message(message)
@@ -612,6 +629,86 @@ async def _handle_half_day(message: discord.Message, lang: str, used_alias: str)
         await send_full_now(message.channel, ev)
 
 
+async def _get_sqlfile_attachment(
+    message: discord.Message,
+) -> discord.Attachment | None:
+    """Return the attachment to use for %sqlfile.
+
+    Supported:
+    - attachment on the same command message
+    - attachment on the replied-to message
+    """
+    if message.attachments:
+        return message.attachments[0]
+
+    if message.reference and message.reference.message_id:
+        try:
+            referenced = await message.channel.fetch_message(
+                message.reference.message_id
+            )
+        except Exception as e:
+            log.error("[sqlfile] Could not fetch referenced message: %s", e)
+            return None
+
+        if referenced.attachments:
+            return referenced.attachments[0]
+
+    return None
+
+
+async def _parse_rows_from_attachment(
+    attachment: discord.Attachment,
+) -> list[dict]:
+    """Download and parse the uploaded FoE file."""
+    from qi_bot.utils.forge_scrape import load_players_from_bytes
+
+    raw = await attachment.read()
+    rows = await asyncio.to_thread(load_players_from_bytes, raw)
+    return rows
+
+
+async def _handle_sqlfile(message: discord.Message):
+    """Manually trigger a FoE → D1 snapshot from an uploaded JSON file (%sqlfile)."""
+    attachment = await _get_sqlfile_attachment(message)
+    if attachment is None:
+        await message.channel.send(
+            "❌ Kein Anhang gefunden.\n"
+            "Benutzung:\n"
+            "- `%sqlfile` zusammen mit einer angehängten Datei senden\n"
+            "- oder `%sqlfile` als Antwort auf eine Nachricht mit Datei senden"
+        )
+        return
+
+    # Optional safety limit
+    max_size = 25 * 1024 * 1024  # 25 MB
+    if attachment.size > max_size:
+        await message.channel.send(
+            f"❌ Datei ist zu gross ({attachment.size} Bytes). Maximum: {max_size} Bytes."
+        )
+        return
+
+    try:
+        rows = await _parse_rows_from_attachment(attachment)
+    except Exception as e:
+        log.exception("[sqlfile] Could not parse uploaded FoE file: %s", e)
+        await message.channel.send(
+            f"❌ Konnte die hochgeladene Datei nicht als FoE-JSON lesen.\n"
+            f"Error: `{type(e).__name__}: {e}`"
+        )
+        return
+
+    try:
+        await message.channel.send(
+            f"📥 Datei gelesen: **{attachment.filename}**\n"
+            f"- Raw rows found: **{len(rows)}**\n"
+            f"- Starte Verarbeitung und Upload nach D1 ..."
+        )
+        await run_manual_snapshot_from_rows_public(message.channel, rows)
+    except Exception as e:
+        log.exception("[sqlfile] Manual file snapshot failed: %s", e)
+        await message.channel.send(
+            f"❌ Manual file snapshot failed.\n" f"Error: `{type(e).__name__}: {e}`"
+        )
 
 
 async def _handle_sql(message: discord.Message):
@@ -621,6 +718,7 @@ async def _handle_sql(message: discord.Message):
 
 
 # -------- Usage messages (lang-specific, no angle brackets) --------
+
 
 def _usage_day(lang: str) -> str:
     if lang == "de":
@@ -646,4 +744,3 @@ def _usage_step(lang: str) -> str:
             "Usage: `%step n`\n"
             "    e.g. `%step 5` shows the fifth message across all days."
         )
-
