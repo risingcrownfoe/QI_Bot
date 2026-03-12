@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime, timedelta
-
+import asyncio
 import discord
 
 from qi_bot.config import settings, get_plan_for_channel
